@@ -61,7 +61,7 @@ maxDomain = 300
 ##Set header
 header = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/35.0.1916.47 Safari/537.36'}
 ##Settings for VPN switching
-sudoPassword = '<<REMOVED>>'
+sudoPassword = '<REMOVED>'
 usedVPN = []
 maxG = 50 ##maximun number of checks per VPN location (before detected)
 
@@ -2727,7 +2727,7 @@ def browsersoup(site):
     try:    
         if os.path.exists("save_page_as.sh"):
             message = subprocess.call(["./save_page_as.sh", site, "--browser", "firefox", "--destination", tempFile])
-            time.sleep(5)
+            time.sleep(2)
             ##Check if file is save
             if os.path.exists(tempFile):
                 f = open(tempFile, encoding="utf-8")    
@@ -2820,8 +2820,8 @@ def cleanLinks(links, country, checkCount = True):
             ##replace %20 with space
             if link.find('%20') > 0:
                 link = link.replace('%20', ' ')
-            ##remove www. section (may cause duplicates)
-            if link.find('www.') > 0:
+            ##remove www. section for html files (NOT FOR PDF_FILES)
+            if link.find('www.') > 0 and not link.lower().find('pdf') > 0: 
                 link = link.replace('www.', '')
             ##Check for domain slash duplciates
             if link == getDomain(link) + "/":
@@ -2983,3 +2983,32 @@ def switchVPN():
         ##Contnue until Connect == True
     ##Return if connected
     return(Connect)
+
+def searchPDFlink(url, country):
+    vurl = ""
+    
+    if url.lower().find('pdf') > 0:
+        ##process links
+        ##Get domain with first part included
+        dom = getDomain(url, False)
+        ##Get pdf part
+        res = url.split("/")
+        pdf = ''
+        for r in res:
+            if r.lower().find('pdf') > 0:
+                pdf = r
+                break
+            
+        ##Check to continur
+        if len(dom) > 0 and len(pdf) > 0:
+            ##Construct query
+            query = dom + " " + pdf
+            ##Get first 10 links                
+            links = queryYahoo3(query, country, 20, 10)
+            ##Check links, return first links woth dom and pdf included
+            for l in links:
+                if l.lower().find(dom) > 0 and l.lower().find(pdf) > 0:
+                    vurl = l
+                    break
+        
+    return(vurl)

@@ -24,7 +24,7 @@ import configparser
 ##os.chdir("/home/piet/R/Drone/Ini_scripts")
 
 ##Define regexes used
-genUrl = r"((?:https?://)?(?:[a-z0-9\-]+[.])?([a-zA-Z0-9_\-]+[.][a-z]{2,4})(?:[a-zA-Z0-9_\-./]+)?)"
+genUrl = r"((?:https?://)?(?:[a-z0-9\-]+[.])?([a-zA-Z0-9_\-]{2,}[.][a-z]{2,4})(?:[a-zA-Z0-9_\-./]+)?)"
 genMail = r"[a-zA-Z0-9_\-.]+@([a-zA-Z0-9_\-]+[.][a-z]{2,4})"
 
 ##Define pdf process fundtion

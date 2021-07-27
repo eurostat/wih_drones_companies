@@ -194,3 +194,49 @@ def queryGoogleVmp(query, country, outputQueue, limit = 0, waitTime = 0):
             outputQueue.put(links)
     else:
         print("Provide an _api_key_")
+
+##Function to cut out domain name of an url (wtith our without http(s):// part)
+def _getDomain(url, prefix = True):
+    top = ""
+    if len(url) > 0:
+        if url.find("/") > 0:
+            ##remove any ? containing part (may be added to url)
+            url = url.split('?')[0]
+            ##Get domain name
+            top = url.split('/')[2]
+            ##add prefix
+            if prefix:
+                top = url.split('/')[0] + '//' + top
+        else:
+            top = url
+    return(top)
+
+##Function to find links to specific pdf file in a domain (link may change)
+def searchPDFlink(url, country):
+    vurl = ""
+    
+    if url.lower().find('pdf') > 0:
+        ##process links
+        ##Get domain with first part included
+        dom = _getDomain(url, False)
+        ##Get pdf part
+        res = url.split("/")
+        pdf = ''
+        for r in res:
+            if r.lower().find('pdf') > 0:
+                pdf = r
+                break
+            
+        ##Check to continur
+        if len(dom) > 0 and len(pdf) > 0:
+            ##Construct query
+            query = dom + " " + pdf
+            ##Get first 10 links                
+            links = queryGoogleV(query, country, 0, 10)
+            ##Check links, return first links woth dom and pdf included
+            for l in links:
+                if l.lower().find(dom) > 0 and l.lower().find(pdf) > 0:
+                    vurl = l
+                    break
+        
+    return(vurl)

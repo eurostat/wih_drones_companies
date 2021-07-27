@@ -702,7 +702,7 @@ def getKeywords(soup):
     
     return(keywords)
  
-@timeout_decorator.timeout(20) ## If execution takes longer than 20 sec, TimeOutError is raised
+@timeout_decorator.timeout(10) ## If execution takes longer than 10 sec, TimeOutError is raised
 def getRedirect(url):
     vurl = ""
     if len(url) > 0:
@@ -714,15 +714,21 @@ def getRedirect(url):
             else:
                 ##Get url
                 vurl = resp.url
+                ##Check vurl (check for ending slash, this speeds up this function)
+                if vurl == url + "/":
+                    vurl = url
             ##Check result, if more redirecting is needed (recursively?) 
             while url != vurl:            
-                ##wait(3)
-                time.sleep(3)
+                ##print(vurl)
+                ##time.sleep(1)
                 resp = requests.head(vurl)
                 if resp.is_redirect:
                     vurl2 = resp.headers['Location']
                 else:
-                    vurl2 = resp.url                
+                    vurl2 = resp.url
+                    ##Check vurl2 (check for ending slash, this speeds up this function)
+                    if vurl2 == vurl + "/":
+                        vurl2 = vurl
                 ##copy linkshttps://airspace.flyryte.com
                 url = vurl ##copy old
                 vurl = vurl2 ##copy new    

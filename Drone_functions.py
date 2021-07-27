@@ -1877,7 +1877,7 @@ def queryYahoo3(query, country, waitTime = 20, limit = 0):
             time.sleep(waitTime) ##Check wait time needed
             ##Get first age results
             ##Create soup
-            soup = createsoup2(url)
+            soup = createsoup2(nextPageLink)
             ##extractLinks from soup
             inter, exter = _extractYahooLinks3(soup, nextPageLink)
 
@@ -2230,7 +2230,7 @@ def queryAOL2(query, country, waitTime = 20, limit = 0):
             time.sleep(waitTime) ##Check wait time needed
             ##Get first age results
             ##Create soup
-            soup = createsoup2(url)
+            soup = createsoup2(nextPageLink)
             ##extractLinks from soup
             inter, exter = _extractAOLLinks2(soup, nextPageLink)
 
@@ -2488,7 +2488,7 @@ def queryAsk1(query, country, waitTime = 20, limit = 0):
             time.sleep(waitTime) ##Check wait time needed
             ##Get first age results
             ##Create soup
-            soup = createsoup2(url)
+            soup = createsoup2(nextPageLink)
             ##extractLinks from soup
             inter, exter = _extractAskLinks1(soup, nextPageLink) ##blocked at page 4
 

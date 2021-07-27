@@ -14,11 +14,8 @@ import pandas
 import multiprocessing as mp
 import configparser
 
-##Set directory
-localDir = "/home/piet/R/Drone/Ini_scripts"
-##Set directory
-os.chdir(localDir)
-
+##Get directory
+localDir = os.getcwd()
 
 ##get regex for url matching in documents
 genUrl = r"((?:https?://)?(?:[a-z0-9\-]+[.])?([a-zA-Z0-9_\-]+[.][a-z]{2,4})(?:[a-zA-Z0-9_\-./]+)?)"

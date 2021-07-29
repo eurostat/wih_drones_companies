@@ -5,9 +5,9 @@ Created on Mon Apr 19 09:19:05 2021
 Script to search for individual web pages of drone companies
 with multiple search engines including Ask
 @author: piet
-Updated on July 23 2021, version 2.0
+Updated on July 28 2021, version 2.04
 """
-##Search list of websites of drone company urls (in ireland)
+##Search list of websites of drone company urls 
 
 #Load libraries 
 import os
@@ -16,6 +16,7 @@ import time
 import pandas
 import random
 import multiprocessing as mp
+import numpy as np
 import configparser
 
 ##Set directory
@@ -24,6 +25,9 @@ import configparser
 ##Define regexes used
 genUrl = r"((?:https?://)?(?:[a-z0-9\-]+[.])?([a-zA-Z0-9_\-]+[.][a-z]{2,4})(?:[a-zA-Z0-9_\-./]+)?)"
 genMail = r"[a-zA-Z0-9_\-.]+@([a-zA-Z0-9_\-]+[.][a-z]{2,4})"
+
+##Factor to multiply the number of cores with for parallel scraping (not for search engine use)
+multiTimes = 1 ##number to multiply number of parallel scraping sessions
 
 ##Define function
 def SearchLists(query, country, limit):
@@ -150,6 +154,37 @@ def SearchLists(query, country, limit):
             links += urls     
 
     return(links)
+
+##function to check content of sites, see if they are drone aggregate sites (count drone acronyms)    
+def CheckSites(links):
+    ##Store vurl (so the actual link is used in future)
+    links2a = [] ##Website links of aggregate drone sites
+    links2b = [] ##Website that could potentially be a drone website
+    for url in links:
+        print(url)
+        ##Check if .ie or ireland/irish is included in url
+        if any(x in url.lower() for x in countryW1):
+            ##Check country extension first, use list
+            urls = df.checkCountries([url], country)
+            if not urls == []:
+                ##scrape page to get soup
+                soup, vurl = df.createsoup(urls[0]) ##error prone?
+                ##get text as lowercase
+                text = df.visibletext(soup, True)
+                if not text == '':
+                    ##Check for country drones and members
+                    if any(x in text for x in countryW2) and any(x in text for x in drone_words) and any(x in text for x in mem_words):
+                        res = sum([text.count(x) for x in drone_words])      
+                        print(res)
+                        if res > 5: ##thereshold to include links (should contain at least 6 mentions of drone synonyms)
+                            if not vurl in links2a:  ##use vurl here so actual link wil be processed
+                                links2a.append(vurl) 
+                        elif res > 0:
+                            if not vurl in links2b:
+                                links2b.append(vurl)
+                        ##keep links with res between 1 and 5?
+    ##return llist
+    return(links2a, links2b)
 
 ##define function to find links on webpages list
 def ExtractSites(interLocal):
@@ -399,34 +434,49 @@ if Continue:
     f.write(str(len(links1b)) + " unique pdf links found\n")
 
 
-    ##3b. Check if the website link is truely about ireland, drones and members/registration or something like that (does this word occur in text on page?)
-    ##Store vurl (so the actual link is used in future)
-    links2a = [] ##Website links of aggregate drone sites
-    links2b = [] ##Website that could potentially be a drone website
-    for url in links1a:
-        print(url)
-        ##Check if .ie or ireland/irish is included in url
-        if any(x in url.lower() for x in countryW1):
-            ##Check country extension first, use list
-            urls = df.checkCountries([url], country)
-            if not urls == []:
-                ##scrape page to get soup
-                soup, vurl = df.createsoup(urls[0]) ##error prone?
-                ##get text as lowercase
-                text = df.visibletext(soup, True)
-                if not text == '':
-                    ##Check for ireland, drones and members
-                    if any(x in text for x in countryW2) and any(x in text for x in drone_words) and any(x in text for x in mem_words):
-                        res = sum([text.count(x) for x in drone_words])      
-                        print(res)
-                        if res > 5: ##thereshold to include links (should contain at least 6 mentions of drone synonyms)
-                            if not vurl in links2a:  ##use vurl here so actual link wil be processed
-                                links2a.append(vurl) 
-                        elif res > 0:
-                            if not vurl in links2b:
-                                links2b.append(vurl)
-                        ##keep links with res between 1 and 5?
-                    
+    ##3b. Check if the website link is truely about country, drones and members/registration or something like that (does this word occur in text on page?)
+    if cores >= 4:
+        ##Multicore scraping
+        ##First, randomize links list
+        random.shuffle(links1a)
+        ##Create chunks list equal to number of cores available
+        chunks = np.array_split(links1a, cores*multiTimes, axis = 0)
+    
+        ##Scrape listst    ##Use all cores to process chunks
+        pool = mp.Pool(cores*multiTimes) ##Pool can be made higher by increasing multiTimes number
+        linksA, linksB = pool.map(CheckSites, [list(c) for c in chunks]) ##domain_list is used as global list
+        time.sleep(4)    
+        pool.close()
+        pool.join()
+    
+        ##Add all links to links4 of lists in list in list
+        links2a = []
+        links2b = []
+        ##Create combined list linksA
+        for links in linksA:
+            for link in links:
+                for l in link:
+                    if l.lower().find('.pdf') > 0:
+                        if not l in links2b:
+                            links2b.append(l)
+                    else:
+                        if not l in links2a: 
+                            links2a.append(l)
+        ##Create combined list part linksB
+        for links in linksB:
+            for link in links:
+                for l in link:
+                    if l.lower().find('.pdf') > 0:
+                        if not l in links2b:
+                            links2b.append(l)
+                    else:
+                        if not l in links2a: 
+                            links2a.append(l)
+        
+    else:
+        ##Process list sequential
+        links2a, links2b = CheckSites(links1a)
+                       
     ##PDF will be stored later (new files may be found)
     ##Show end result of cleaning
     print(str(len(links2a)) + " unique drone aggregate website links found")
@@ -508,7 +558,7 @@ if Continue:
         ##First, randomize domain_list
         random.shuffle(g_domain_list)
         ##Create chunks list equal to number of cores available
-        chunks = [[] for i in range(cores)]  
+        chunks = [[] for i in range(cores*multiTimes)]  ##Number of cores can be made higher by increasing multiTimes
         count = 0
         for dom in g_domain_list:
             ##Get all urls in internalL per domain
@@ -523,7 +573,7 @@ if Continue:
                 count = 0
     
         ##Scrape listst    ##Use all cores to process chunks
-        pool = mp.Pool(cores)
+        pool = mp.Pool(cores*multiTimes) ##Pool can be made higher by increasing multiTimes number
         linksL = pool.map(ExtractSites, [list(c) for c in chunks]) ##domain_list is used as global list
         time.sleep(4)    
         pool.close()
@@ -536,7 +586,7 @@ if Continue:
         for links in linksL:
             for link in links:
                 for l in link:
-                    if l.find('.pdf') > 0:
+                    if l.lower().find('.pdf') > 0:
                         links4b.append(l)
                     else: 
                         links4a.append(l)

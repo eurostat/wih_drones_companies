@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+##July 29 2021, version 1.0
 
 ## Check urls found, input is a list of urls, first part of script4 only goes as afar as to check social media for additional urls
 ## Version with startPosition as input 

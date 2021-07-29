@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+## July 29 2021, version 1.01
 
 ## Check urls found, input is a list of urls, first part of script4 only goes as afar as to check social media for additional urls
 ##with updated location search (inlcude text preprocessing and spaceses added to names)
@@ -14,7 +15,7 @@ import pandas
 import multiprocessing as mp
 import configparser
 
-##Get directory
+##Get current directory
 localDir = os.getcwd()
 
 ##get regex for url matching in documents
@@ -22,7 +23,7 @@ genUrl = r"((?:https?://)?(?:[a-z0-9\-]+[.])?([a-zA-Z0-9_\-]+[.][a-z]{2,4})(?:[a
 genMail = r"[a-zA-Z0-9_\-.]+@([a-zA-Z0-9_\-]+[.][a-z]{2,4})"
 
 ##Exclude vurl for often occuring not relevant urls 
-urls_exclude = ["doi.org", "google.com", "youtube.com", "youtu.be", "worldcat.org", "b.tracxn.com", "gmail.com", "cookiedatabase.org", "twitter.com/share?", "twitter.com/hashtag", "twitter.com/intent/", "facebook.com/sharer.php?", "instagram.com/p/", "addtoany.com/add_to/", "whatsapp://send?", "pinterest.com/pin/", "t.me/share/url?"]
+urls_exclude = ["doi.org", "google.com", "youtube.com", "youtu.be", "worldcat.org", "b.tracxn.com", "gmail.com", "cookiedatabase.org", "twitter.com/share?", "twitter.com/hashtag", "twitter.com/intent/", "facebook.com/sharer.php?", "instagram.com/p/", "addtoany.com/add_to/", "whatsapp://send?", "pinterest.com/pin/", "t.me/share/url?", "change-this-email-address.com"]
 
 ##Define tristate object inCountry
 class inCountry(object):
@@ -576,18 +577,19 @@ if Continue:
             if name in wCountries1:
                 wCountries1.remove(name)
 
-        ##if country == 'ie':
-        ##    wCountries1.remove('Ireland')
-        ##    wCountries1.remove('Iere')
-        ##elif country == 'nl':
-        ##    wCountries1.remove('Nederland')
-        ##    wCountries1.remove('Netherlands')
-        ##elif country == 'es':
-        ##    wCountries1.remove('Espania')
-        ##    wCountries1.remove('Spain') 
-        ##elif country == 'de':
-        ##   wCountries1.remove('Deutschland')
-        ##   wCountries1.remove('Germany')
+        ##Check for existence of essential files
+        fileName1E = localDir + "/1_external_" + country.upper() + lang.lower() + "1.csv"
+        fileName2E = localDir + "/2_external_" + country.upper() + lang.lower() + "1.csv"
+        fileName3E = localDir + "/3_externalPDF_" + country.upper() + lang.lower() + "1.csv" ##Check name
+        if not os.path.isfile(fileName1E):
+            print(fileName1E + " file was not found, make sure its available. Script halted")
+            Continue = False
+        if not os.path.isfile(fileName2E):
+            print(fileName2E + " file was not found, make sure its available. Script halted")
+            Continue = False
+        if not os.path.isfile(fileName3E):
+            print(fileName3E + " file was not found, make sure its available. Script halted")
+            Continue = False            
     except:
         ##An error occured
         print("An error occured during preparation of city name, domain or world file names loading")
@@ -607,21 +609,35 @@ if Continue:
     f = open(logFile, 'w')
 
     ##1. Obtain data                   
-    ##1a. Get urls, from 3 diferent files
-    fileName1E = localDir + "/1_external_" + country.upper() + lang.lower() + "1.csv"
+    ##1a. Get urls, from 4 diferent files
+    
+    ##Get results of script 1
     urls_found1 = pandas.read_csv(fileName1E, sep = ",", header=None)
-
-    fileName2E = localDir + "/2_external_" + country.upper() + lang.lower() + "1.csv"
-    urls_found2 = pandas.read_csv(fileName2E, sep = ",", header=None) ##had a ; in string
-
+    
+    ##get results of script 2
+    urls_found2 = pandas.read_csv(fileName2E, sep = ",", header=None) 
+    
+    ##Get intermediat result of script 2 (may not be created when empty)
     fileName2Eb = localDir + "/2_external_" + country.upper() + lang.lower() + "_drone_low_1.csv"
-    urls_found2b = pandas.read_csv(fileName2Eb, sep = ",", header=None) ##
-
-    fileName3E = localDir + "/3_externalPDF_" + country.upper() + lang.lower() + "1.csv" ##Check name
+    if os.path.isfile(fileName2Eb):
+        urls_found2b = pandas.read_csv(fileName2Eb, sep = ",", header=None) ##
+    else:
+        print(fileName2Eb + " was not found, is this OK?")
+        urls_found2b = []
+    
+    ##Get intermediat result of script 2 (may not be created when empty)    
+    fileName2Ec = localDir + "/2_external_" + country.upper() + lang.lower() + "_drone_high_1.csv"
+    if os.path.isfile(fileName2Ec):
+        urls_found2c = pandas.read_csv(fileName2Ec, sep = ",", header=None) ##May also contain relevant URLs
+    else:
+        print(fileName2Ec + " was not found, is this OK?")
+        urls_found2c = []
+    
+    ##Get result from PDF extraction
     urls_found3 = pandas.read_csv(fileName3E, sep = ",", header=None)
 
     ##Combine findings
-    frames = [urls_found1, urls_found2, urls_found2b, urls_found3]
+    frames = [urls_found1, urls_found2, urls_found2b, urls_found2c, urls_found3]
     ##frames = [urls_found1, urls_found3]
     urls_foundDF = pandas.concat(frames)
     ##Drop duplicates (in first column)
@@ -745,7 +761,7 @@ if Continue:
             ##Only add if new
             if not dom in dom_found2b:
                 dom_found2b.append(dom)
-    ##Total of 6127 (or 6948 with dom of slash <=3)
+    
     ##Save list of urls
     fileName4 = "4_external_"+ country.upper() + lang.lower() + "1.csv"
     totalUrls = pandas.DataFrame(dom_found2b)

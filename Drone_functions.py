@@ -5,7 +5,7 @@ Created on Tue Jan 26 08:37:51 2021
 
 @author: piet
 
-Updated on July 23 2021, version 3.0
+Updated on July 28 2021, version 3.02
 
 """
 ##Drone functions file
@@ -733,7 +733,11 @@ def getRedirect(url):
                 url = vurl ##copy old
                 vurl = vurl2 ##copy new    
         except:  ##timed out by website (because it does not exists)
-            vurl = ""
+            if not url.lower().find('www.') > 0:
+                url1 = url.replace('://', '://www.')
+                vurl = getRedirect(url1)
+            else:
+                vurl = ""
     return(vurl)    
 
 ##Function to search website main and links on main page with regex

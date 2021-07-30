@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-## July 29 2021, version 1.01
+## July 30 2021, version 1.02
 
 ## Check urls found, input is a list of urls, first part of script4 only goes as afar as to check social media for additional urls
 ##with updated location search (inlcude text preprocessing and spaceses added to names)
@@ -372,6 +372,53 @@ def Pinterestchecks(vurl, brows = 1):
 
     return(vurl2, inCountry)
 
+def reduceLinks(urls_list):
+    urls_list2 = []    
+    ##process urls in list
+    for url in urls_list:
+        ##Check end
+        if url.endswith("/"):
+            ##remove final slash
+            url = url[0:-1]
+        
+        ##Count number of slashes
+        num = url.count("/")
+        
+        ##Check count of slashes
+        if num >= 4:
+            url1 = ""
+            ##Check Social media options
+            if url.lower().find("twitter.com/") > 0 or url.lower().find("facebook.com/") > 0 or url.lower().find("instagram.com/") > 0 or url.lower().find("pinterest.com/") > 0:
+                ##cut out part before the 4th slash
+                count = 0                
+                for i in range(len(url)-1):
+                    if url[i] == "/":
+                        count +=1
+                    if count == 4:
+                        url1 = url[0:i]
+                        break                    
+                ##get url1    
+                url = url1
+            elif url.lower().find("linkedin.com/") > 0:
+                ##cut out part before the 5th slash
+                count = 0                
+                for i in range(len(url)-1):
+                    if url[i] == "/":
+                        count +=1
+                    if count == 5:
+                        url1 = url[0:i]
+                        break                    
+                ##get url1    
+                url = url1       
+            else:
+                url = df.getDomain(url)
+        
+        ##Add to urls_list2
+        if not url in urls_list2:
+            urls_list2.append(url)
+    
+    return(urls_list2)
+
 def PreProcessList(urls_list, country):
     urls_cleaned = []
     
@@ -438,8 +485,11 @@ def PreProcessList(urls_list, country):
         
     ##3c. ALso check for / or no slah variant and remove domains not referening to country being studied
     urls_cleaned2a, urlsNot = df.cleanLinks(urls_cleaned2, country, True)
+    
+    ##3d remove links with 4 or more slashes, but keep domain name, take care of social media (4/5 slashes allowed)
+    urls_cleaned2b = reduceLinks(urls_cleaned2a)
 
-    return(urls_cleaned2a)
+    return(urls_cleaned2b)
 
 ##Check for links on Social media after preprocessing
 def ProcessSoc(urls_found, brows = 1):
@@ -612,8 +662,7 @@ if Continue:
     ##1a. Get urls, from 4 diferent files
     
     ##Get results of script 1
-    urls_found1 = pandas.read_csv(fileName1E, sep = ",", header=None)
-    
+    urls_found1 = pandas.read_csv(fileName1E, sep = ",", header=None)    
     ##get results of script 2
     urls_found2 = pandas.read_csv(fileName2E, sep = ",", header=None) 
     

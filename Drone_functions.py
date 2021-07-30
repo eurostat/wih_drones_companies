@@ -5,7 +5,7 @@ Created on Tue Jan 26 08:37:51 2021
 
 @author: piet
 
-Updated on July 28 2021, version 3.02
+Updated on July 30 2021, version 3.04
 
 """
 ##Drone functions file
@@ -60,27 +60,31 @@ waitTime = 60
 maxDomain = 300
 ##Set header
 header = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/35.0.1916.47 Safari/537.36'}
-##Settings for VPN switching
-sudoPassword = '<REMOVED>'
-usedVPN = []
-maxG = 50 ##maximun number of checks per VPN location (before detected)
 
-##get ovpn files
-filesOVPN = os.listdir('/etc/openvpn')
-##Only keep .ovpn
-filesOVPN = [x for x in filesOVPN if x.endswith('.ovpn')]
-##remove any duplicates
-filesOVPN = list(set(filesOVPN)) 
-##Show result
-if len(filesOVPN) > 0:
-    print(str(len(filesOVPN)) + " OVPN-files found")
+##check if ovpn files are available
+if os.path.isdir('/etc/openvpn'):
+    ##Settings for VPN switching
+    sudoPassword = '<REMOVED>'  ##Put SUDO password here
+    usedVPN = []
+    maxG = 50 ##maximun number of checks per VPN location (before detected)
+
+    ##get openvpn files
+    filesOVPN = os.listdir('/etc/openvpn')
+    ##Only keep .ovpn
+    filesOVPN = [x for x in filesOVPN if x.endswith('.ovpn')]
+    ##remove any duplicates
+    filesOVPN = list(set(filesOVPN)) 
+    ##Show result
+    if len(filesOVPN) > 0:
+        print(str(len(filesOVPN)) + " OVPN-files found")
+
 ##define queu
 outq = queue.Queue()    
 
 ##Regex
 genUrl = r"((?:https?://)?(?:[a-z0-9\-]+[.])?([a-zA-Z0-9_\-]+[.][a-z]{2,4})(?:[a-zA-Z0-9_\-./]+)?)"
 ##define list of other EU countries domain + us, ca, au, sg, china
-euDom = ['ad', 'ae', 'am', 'at', 'au', 'ba', 'be', 'bg', 'br', 'by', 'ca', 'ch', 'cn', 'cy', 'cz', 'de', 'dk', 'ee', 'es', 'fi', 'fo', 'fr', 'gg', 'gi', 'gl', 'gp', 'gr', 'hr', 'hu', 'ie', 'il', 'im', 'is', 'it', 'je', 'jp', 'kr', 'li', 'lt', 'lu', 'lv', 'mc', 'md', 'me', 'mk', 'mt', 'nl', 'no', 'nz', 'pm', 'pl', 'pt', 're', 'ro', 'rs', 'ru', 'se', 'sg', 'si', 'sk', 'su', 'tf', 'tr', 'ua', 'uk', 'us', 'wf', 'yt', 'za']
+euDom = ['ad', 'ae', 'am', 'at', 'au', 'ba', 'be', 'bg', 'br', 'by', 'ca', 'ch', 'cn', 'cy', 'cz', 'de', 'dk', 'ee', 'es', 'fi', 'fo', 'fr', 'gg', 'gi', 'gl', 'gp', 'gr', 'hr', 'hu', 'ie', 'il', 'im', 'is', 'it', 'je', 'jp', 'kr', 'li', 'lt', 'lu', 'lv', 'mc', 'md', 'me', 'mk', 'mt', 'mx', 'nl', 'no', 'nz', 'pm', 'pl', 'pt', 're', 'ro', 'rs', 'ru', 'se', 'sg', 'si', 'sk', 'su', 'tf', 'tr', 'ua', 'uk', 'us', 'wf', 'yt', 'za']
 ##list is not complete yet (but it is for Europe), added nz kr ae
 
 ##list of country names (n English as a first test)

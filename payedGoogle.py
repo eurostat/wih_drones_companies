@@ -4,7 +4,7 @@
 Created on Thu Apr 29 12:42:08 2021
 
 @author: Piet Daas
-Updated on July 23 2021, version 1.0
+Updated on July 30 2021, version 1.01
 """
 ##Separat google scrape via PAID value SERP account
 ##Set correct API_KEY prior to use in code that import this file
@@ -211,6 +211,59 @@ def _getDomain(url, prefix = True):
             top = url
     return(top)
 
+##Google payed scrape function (set api_key prio to use), to collect ONLY links on first page (no further scraping)
+def _queryGoogleV2(query, country, waitTime = 0, limit = 10):
+    ##Check if api_key has a value
+    if not _api_key_ == "":
+        urls_found = []
+    
+        # set up the request parameters
+        params = {
+            'api_key': _api_key_,
+            'q' : query,
+            'google_domain' : 'google.' + country,
+            'filter' : '0'
+        }
+
+        ## Do first requests
+        api_result = requests.get('https://api.valueserp.com/search', params)
+
+        ## Extract links and next page from JSON resultP
+        result = api_result.json()
+
+        ##Check if all worked well
+        res = result['request_info']
+                
+        ##Check for succes
+        if res['success']:
+            try:
+                ##Get organic_results part
+                result2 = result['organic_results']
+                ##get links
+                for i in result2:
+                    ##get link
+                    link = i['link']
+                    if not link in urls_found:
+                        urls_found.append(link)
+                
+                ##show progress
+                print(str(len(urls_found)) + " links found on first page of Google payed")
+            except:
+                print("An error occurred") ##organic_results did not exists
+        else:
+            if res:
+                ##Scraping failed, check reason
+                if res['topup_credits_remaining'] <= 0:
+                    print("Credit has become 0, pay for new queries")
+                else:
+                    print("An error occured")
+            else:
+                print("No access to API")
+        return(urls_found)    
+    else:
+        print("Provide an _api_key_")
+
+
 ##Function to find links to specific pdf file in a domain (link may change)
 def searchPDFlink(url, country):
     vurl = ""
@@ -231,8 +284,8 @@ def searchPDFlink(url, country):
         if len(dom) > 0 and len(pdf) > 0:
             ##Construct query
             query = dom + " " + pdf
-            ##Get first 10 links                
-            links = queryGoogleV(query, country, 0, 10)
+            ##Get links on first page (limits number of requests)                
+            links = _queryGoogleV2(query, country, 0, 10)
             ##Check links, return first links woth dom and pdf included
             for l in links:
                 if l.lower().find(dom) > 0 and l.lower().find(pdf) > 0:

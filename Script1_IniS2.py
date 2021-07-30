@@ -5,7 +5,7 @@ Created on Mon Apr 19 09:19:05 2021
 Script to search for individual web pages of drone companies
 Scrape per search engine
 @author: piet
-Updated on July 23 2021, version 2.0 (All loop needs to implemented nicely)
+Updated on July 30 2021, version 2.01 ##VPN free version
 """
 ##Search websites of drone company urls with six Search Engines (in paralle sequential or seperate)
 
@@ -27,7 +27,7 @@ def scrapeSearchEngines(searchEng, query, country, limit = 0):
     if searchEng == "" or searchEng == "D1":
         ##DuckDuckGo
         print("Duck 1 search")
-        D1links = df.queryDuck1VPN(query, country, 5, limit) ##Chromedriver may crash, restart not optimal yet
+        D1links = df.queryDuck1(query, country, 5, limit) ##Chromedriver may crash, restart not optimal yet
         print("Duck 1 found " + str(len(D1links)) + " urls")
         f.write("Duck 1 found " + str(len(D1links)) + " urls\n")
     else:
@@ -61,7 +61,7 @@ def scrapeSearchEngines(searchEng, query, country, limit = 0):
     ##Yahoo search
     if searchEng == "" or searchEng == "Y3":
         print("Yahoo 3 search")
-        Y3links = df.queryYahoo3VPN(query, country, 20, limit)
+        Y3links = df.queryYahoo3(query, country, 20, limit)
         print("Yahoo 3 found " + str(len(Y3links)) + " urls")
         f.write("Yahoo 3 found " + str(len(Y3links)) + " urls\n")
     else:
@@ -70,7 +70,7 @@ def scrapeSearchEngines(searchEng, query, country, limit = 0):
     ##AOL search ##Include Ask?
     if searchEng == "" or searchEng == "A2":
         print("AOL 2 search")
-        A2links = df.queryAOL2VPN(query, country, 20, limit)
+        A2links = df.queryAOL2(query, country, 20, limit)
         print("AOL 2 found " + str(len(A2links)) + " urls")
         f.write("AOL 2 found " + str(len(A2links)) + " urls\n")
     else:
@@ -79,7 +79,7 @@ def scrapeSearchEngines(searchEng, query, country, limit = 0):
     ##Search Ask S1
     if searchEng == "" or searchEng == "S1":
         print("Ask 1 search")
-        S1links = df.queryAsk1VPN(query, country, 20, limit)
+        S1links = df.queryAsk1(query, country, 20, limit)
         print("Ask 1 found " + str(len(S1links)) + " urls")
         f.write("Ask 1 found " + str(len(S1links)) + " urls\n")
     else:

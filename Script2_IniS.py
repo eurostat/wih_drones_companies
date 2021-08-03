@@ -5,9 +5,9 @@ Created on Mon Apr 19 09:19:05 2021
 Script to search for individual web pages of drone companies
 with multiple search engines including Ask
 @author: piet
-Updated on July 28 2021, version 2.04
+Updated on Aug 3 2021, version 2.05
 """
-##Search list of websites of drone company urls 
+##Search list of websites of drone company urls (in ireland)
 
 #Load libraries 
 import os
@@ -444,7 +444,7 @@ if Continue:
     
         ##Scrape listst    ##Use all cores to process chunks
         pool = mp.Pool(cores*multiTimes) ##Pool can be made higher by increasing multiTimes number
-        linksA, linksB = pool.map(CheckSites, [list(c) for c in chunks]) ##domain_list is used as global list
+        linksA = pool.map(CheckSites, [list(c) for c in chunks]) ##domain_list is used as global list
         time.sleep(4)    
         pool.close()
         pool.join()
@@ -454,16 +454,6 @@ if Continue:
         links2b = []
         ##Create combined list linksA
         for links in linksA:
-            for link in links:
-                for l in link:
-                    if l.lower().find('.pdf') > 0:
-                        if not l in links2b:
-                            links2b.append(l)
-                    else:
-                        if not l in links2a: 
-                            links2a.append(l)
-        ##Create combined list part linksB
-        for links in linksB:
             for link in links:
                 for l in link:
                     if l.lower().find('.pdf') > 0:

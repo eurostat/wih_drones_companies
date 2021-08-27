@@ -4,7 +4,7 @@
 Created on Thu Apr 29 12:42:08 2021
 
 @author: Piet Daas
-Updated on July 30 2021, version 1.01
+Updated on Aug 5 2021, version 1.02 reversed PDF name search
 """
 ##Separat google scrape via PAID value SERP account
 ##Set correct API_KEY prior to use in code that import this file
@@ -275,7 +275,7 @@ def searchPDFlink(url, country):
         ##Get pdf part
         res = url.split("/")
         pdf = ''
-        for r in res:
+        for r in reversed(res):
             if r.lower().find('pdf') > 0:
                 pdf = r
                 break

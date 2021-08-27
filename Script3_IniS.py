@@ -4,7 +4,9 @@
 Created on Mon Apr 19 09:19:05 2021
 Script to search for individual web pages of drone companies
 @author: piet
-Updated on July 28 2021, version 1.12
+Updated on Aug 11 2021, version 1.16, included limited pdf name search by creating list of pdf names, chunks contain identical named files
+Try to maximally reduce extra (payed google) searches, imporved parallel processing
+Option to in- or exclude fileSearch (new in Ini-file), additional country domain extension check after Redirect
 """
 ##Extract links (of drone companies) from pdf-files
 
@@ -13,11 +15,11 @@ import os
 import sys
 import time
 import pandas
-import random
+##import random
 import re
 import glob
 import multiprocessing as mp
-import numpy as np
+##import numpy as np
 import configparser
 
 ##Set directory
@@ -27,10 +29,27 @@ import configparser
 genUrl = r"((?:https?://)?(?:[a-z0-9\-]+[.])?([a-zA-Z0-9_\-]{2,}[.][a-z]{2,4})(?:[a-zA-Z0-9_\-./]+)?)"
 genMail = r"[a-zA-Z0-9_\-.]+@([a-zA-Z0-9_\-]+[.][a-z]{2,4})"
 
+##Factor to multiply the number of cores with for parallel scraping (not for search engine use)
+multiTimes = 1 ##number to multiply number of parallel scraping sessions
+
+##Define fundtions, to dealwith global variable
+def getName(url):
+    pdf = ""
+    ##Split url and locate pdf containing part
+    if len(url) > 0:
+        ##Get pdf part
+        res = url.split("/")
+        for r in reversed(res):
+            if r.lower().find('pdf') > 0:
+                pdf = r
+                break
+    return(pdf)    
+
 ##PDF processing function
 def processPDF(linksPDF):
     ##init list for links found
     links2 = []
+    pdfsread = []
     
     ##Check for multicore, create tempFiles of PDF (when needed) unique for each core
     if cores >= 2:
@@ -44,46 +63,73 @@ def processPDF(linksPDF):
         
     ##Get content of PDFs and extract links
     for url in linksPDF:
+        ##define and clear name
+        name = ""
+        nameV = ""
+        vurl = ""
         ##Check for .pdf in link
         if url.lower().find(".pdf") > 0:                     
-            ##Check if file exists (and get correct url, just in case)
-            vurl = df.getRedirect(url) ##this prevents that acces may 'hang' on it
+            ##Check if filename in url is already downloaded succesfully
+            name = getName(url)
+            if not name in pdfsread and not name == "":
+                ##Check if file exists (and get correct url, just in case)
+                vurl = df.getRedirect(url) ##this prevents that acces may 'hang' on it, may result in other country domain ext link
             
-            ##IF FILE DOES NOT EXISTS SEARCH FOR LINK TO FILE BY SEARCHING FOR DOMAIN NAME and FILENAME (on Yahoo3/GooglePayed?)
-            if vurl == "":
-                 ##Try to find fresh link to file in domain (Yahoo is used for search)
-                if payedGoogle:
-                    vurl = pg.searchPDFlink(url, country)
-                else:
-                    vurl = df.searchPDFlink(url, country) ##Set to Yahoo at the moment (may be a problem when run in Parallel)
-                
+                ##if file is not found and searc option is true SEARCH FOR DOMAIN NAME and FILENAME (on Yahoo3/GooglePayed?)
+                if vurl == "" and fileSearch:
+                    ##Try to find fresh link to file in domain (Yahoo is used for search)
+                    if payedGoogle:
+                        vurl = pg.searchPDFlink(url, country)
+                    else:
+                        vurl = df.searchPDFlink(url, country) ##Set to Yahoo at the moment (may be a problem when run in Parallel)
+                        
+                ##Check if link is located in domain extensions allowed
+                if not vurl == "":
+                    vurl = df.checkCountries([vurl], country) 
+            else:
+                ##already proccessed, clear vurl
+                vurl = ""
+                    
             ##Check if url exists and still refers to pdf
             if not vurl == "" and vurl.lower().find('.pdf') > 0:
                 ###cut out whole link including .pdf (removes any garbage) 
                 vurl = vurl[0:vurl.lower().rindex(".pdf")+4]        
-                ##Show url to process
-                print(vurl)
                 
-                ##Scrape pdf, get text and make sure its lowercase (function has a time out, in case)
-                textPdf = df.getPdfText(vurl, True, number) ##adjust function for multicore download?
+                ##Check vurl name of file
+                nameV = getName(vurl)
+                if not nameV in pdfsread and not nameV == "":
+                    ##Show url to process
+                    print(vurl)
                 
-                ##If no text is found , try to find a fresh link to file
-                if len(textPdf) == 0:
-                    ##Try to find fresh link to file in domain (Yahoo is used for search)
-                    if payedGoogle:
-                        vurl = pg.searchPDFlink(vurl, country)
-                    else:
-                        vurl = df.searchPDFlink(vurl, country) ##Set to Yahoo at the moment (may be a problem in Parallel)
+                    ##Scrape pdf, get text and make sure its lowercase (function has a time out, in case)
+                    textPdf = df.getPdfText(vurl, True, number) ##adjust function for multicore download?
+                
+                    ##If no text is found , try to find a fresh link to file
+                    if len(textPdf) == 0 and not url == vurl and fileSearch:  ##No need to search agian when urls are identical
+                        ##Try to find fresh link to file in domain (Since name of file has not be extracted yet)
+                        if payedGoogle:
+                            vurl = pg.searchPDFlink(vurl, country)
+                        else:
+                            vurl = df.searchPDFlink(vurl, country) ##Set to Yahoo at the moment (may be a problem in Parallel)
  
-                    ##Check result
-                    if not vurl == "" and vurl.lower().find('.pdf') > 0:
-                        ##Scrape pdf, get text and make sure its lowercase (function has a time out, in case)
-                        textPdf = df.getPdfText(vurl, True, number) ##adjust function for multicore download?
-                    else:
-                        textPdf = ''
+                        ##Check result
+                        nameV = getName(vurl)
+                        if not vurl == "" and vurl.lower().find('.pdf') > 0 and not nameV in pdfsread:
+                            ##Scrape pdf, get text and make sure its lowercase (function has a time out, in case)
+                            textPdf = df.getPdfText(vurl, True, number) ##adjust function for multicore download?
+                        else:
+                            textPdf = ''
+                else:
+                    ##clear vars
+                    vurl = ''
+                    textPdf = ''
                         
                 ##Check content
                 if len(textPdf) > 0:
+                    ##When file has been scraped succesfuly add to pdfsread
+                    if not nameV in pdfsread: 
+                        pdfsread.append(nameV)
+                    
                     ##Deal with \n but prevent . (at end of sentence) merges with start of next sentence
                     text = textPdf.replace(".\n", ". ")  
                     ##Correct \n in text (may split urls in 2 parts)
@@ -166,6 +212,7 @@ if Continue and not fileName == '':
         country = config.get('MAIN', 'country')
         lang = config.get('MAIN', 'lang')
         googleKey = config.get('MAIN', 'googleKey')
+        fileSearch = config.getboolean('SETTINGS3', 'fileSearch')
         payedGoogle = config.getboolean('SETTINGS3', 'payedGoogle')
         countryW2 = config.get('SETTINGS3', 'countryW2').split(',')
         drone_words = config.get('SETTINGS3', 'drone_words').split(',')
@@ -217,11 +264,15 @@ if Continue:
 
     ##Get content
     pdf1Content = df.loadCSVfile(fileName1)
-    pdf2Content = df.loadCSVfile(fileName2)
+    pdf2Content = df.loadCSVfile(fileName2) ##Error in file???
 
     ##Exctract filrst coloumn
     pdf1 = list(pdf1Content.iloc[:,0])
+    if pdf1[0] == '0':
+        pdf1 = pdf1[1:len(pdf1)]
     pdf2 = list(pdf2Content.iloc[:,0])
+    if pdf2[0] == '0':
+        pdf2 = pdf2[1:len(pdf2)]
 
     print(str(len(pdf1)) + " links found in pdf-list of Script 1")
     f.write(str(len(pdf1)) + " links found in pdf-list of Script 1\n")
@@ -231,12 +282,12 @@ if Continue:
     ##Combine lists
     pdfAll = pdf1 + pdf2
     
-    ##Clean files (deduplicate, preprocess  etc, DO NOT CHECK COUNTRY YET)
-    linksNot, totalPDF = df.cleanLinks(pdfAll, country, False)
+    ##Clean files (deduplicate, preprocess  check country)
+    linksNot, totalPDF = df.cleanLinks(pdfAll, country, True)
 
     ##store results
-    print("A total of " + str(len(totalPDF)) + " links found in pdf-list of Script 1")
-    f.write("A total of " + str(len(totalPDF)) + " links found in pdf-list of Script 1\n")
+    print("A total of " + str(len(totalPDF)) + " links found in pdf-list of Scripts 1 and 2")
+    f.write("A total of " + str(len(totalPDF)) + " links found in pdf-list of Scripts 1 and 2\n")
 
     ##2. Process and check PDFs
     links2 = []
@@ -246,14 +297,36 @@ if Continue:
         print("Parallel PDF-extraction started on " + str(cores) + " cores")
         f.write("Parallel PDF-extraction started on " + str(cores) + " cores\n")
     
-        ##randomize dataframe
-        random.shuffle(totalPDF)
-    
-        ##split pdf in chunks
-        chunks = np.array_split(totalPDF, cores, axis = 0)
-    
+        ##Create chunks with similar pdf names in same chunk
+        ##a. Get unique names
+        namesPDF = []
+        for pdf in totalPDF:
+            name = getName(pdf)
+            if not name in namesPDF and not name == '':
+                namesPDF.append(name)
+        namesPDF.sort()
+        
+        ##b. Create empty chunks
+        chunks = []
+        for i in range(cores*multiTimes):
+            chunks.append([])
+            
+        ##c. distribute pdfs over chunks (name dependent so identical names are included in same chunk)
+        start = 0
+        for name in namesPDF:
+            ##get pdflinks containing exact name (PARTIAL MATCHING MUST BE PREVENTED)
+            pdfs = [x for x in totalPDF if name == getName(x)]
+            ##Add to chunk
+            if len(pdfs) > 0:
+                for p in pdfs:
+                    if not p in chunks[start]:
+                        chunks[start].append(p)
+                start += 1
+                if start >= len(chunks):
+                    start = 0
+            
         ##Use all cores to process file
-        pool = mp.Pool(cores)
+        pool = mp.Pool(cores*multiTimes)
         linksP = pool.map(processPDF, [list(c) for c in chunks])
         time.sleep(4)    
         pool.close()

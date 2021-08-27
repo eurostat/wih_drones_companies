@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-## July 30 2021, version 1.02
-
+## Aug 12 2021, version 1.07, added final cleaning step for nan and empty spaces
+## changed pandas read_csv to df.loadCSVfile fundtionc whihc is more generic and solves pands read iseu for some files
 ## Check urls found, input is a list of urls, first part of script4 only goes as afar as to check social media for additional urls
 ##with updated location search (inlcude text preprocessing and spaceses added to names)
+##reduced duplicate http splitting, pandas empty frames and option to in- or exclude social media search
 
 #Load libraries 
 import os
@@ -414,8 +415,9 @@ def reduceLinks(urls_list):
                 url = df.getDomain(url)
         
         ##Add to urls_list2
-        if not url in urls_list2:
-            urls_list2.append(url)
+        if not url == '':
+            if not url in urls_list2:
+                urls_list2.append(url)
     
     return(urls_list2)
 
@@ -431,28 +433,12 @@ def PreProcessList(urls_list, country):
         if url.startswith('https://http'):
             url = url[8:len(url)]
         
-        ##1b. Check for multiple links in 1 url 
-        if url.count("http") > 1:
-            urls = url.split("http")
-            for u in urls:
-                ##Ignore empty urls
-                if len(u) > 0:
-                    ##replace essential codes with correct : and / signs
-                    u = u.replace('%3A', ':')
-                    u = u.replace('%2F', '/')
-                    u = "http" + u
-                    us = df.checkUrls(u)
-                    if not us == []:
-                        for u1 in us:
-                            if not u1 == '':
-                                links.append(u1)                
-        else:
-            ##Check http correctness and correct if that is not the case
-            us = df.checkUrls(url)
-            if not us == []:
-               for u1 in us:
-                   if not u1 == '':
-                       links.append(u1)
+        ##1b. Check urls (a.o. for multiple links in 1 url)
+        us = df.checkUrls(url)
+        if not us == []:
+            for u1 in us:
+                if not u1 == '' and not u1 in links:
+                    links.append(u1)
         ##1. sIt is ESSENTIAL TO FIRST SPLIT ANY MULTIPLE URL CONTAINING url
 
     ##2. Check each link found with regEx
@@ -584,6 +570,7 @@ if Continue and not fileName == '':
         drone_words = config.get('SETTINGS4', 'drone_words').split(',')
         mem_words = config.get('SETTINGS4', 'mem_words').split(',')
         runParallel = config.getboolean('SETTINGS4', 'runParallel')
+        socialSearch = config.getboolean('SETTINGS4', 'socialSearch')
         cityNameFile = config.get('SETTINGS4', 'cityNameFile')
         countryNames = config.get('SETTINGS4', 'countryNames').split(',')
         
@@ -610,7 +597,7 @@ if Continue:
         
     try: 
         #get municipalities of NL
-        municl = pandas.read_csv(cityNameFile, sep = ";", header=None) ##Need plaatsnamen lijst hier
+        municl = df.loadCSVfile(cityNameFile)
         municl2 = list(municl.iloc[:,0])
         ##Remove any leading and lagging spaces
         municL = [x.strip() for x in municl2]
@@ -662,28 +649,28 @@ if Continue:
     ##1a. Get urls, from 4 diferent files
     
     ##Get results of script 1
-    urls_found1 = pandas.read_csv(fileName1E, sep = ",", header=None)    
+    urls_found1 = df.loadCSVfile(fileName1E)    
     ##get results of script 2
-    urls_found2 = pandas.read_csv(fileName2E, sep = ",", header=None) 
+    urls_found2 = df.loadCSVfile(fileName2E) 
     
     ##Get intermediat result of script 2 (may not be created when empty)
     fileName2Eb = localDir + "/2_external_" + country.upper() + lang.lower() + "_drone_low_1.csv"
     if os.path.isfile(fileName2Eb):
-        urls_found2b = pandas.read_csv(fileName2Eb, sep = ",", header=None) ##
+        urls_found2b = df.loadCSVfile(fileName2Eb) ##
     else:
         print(fileName2Eb + " was not found, is this OK?")
-        urls_found2b = []
+        urls_found2b = pandas.DataFrame([])
     
     ##Get intermediat result of script 2 (may not be created when empty)    
     fileName2Ec = localDir + "/2_external_" + country.upper() + lang.lower() + "_drone_high_1.csv"
     if os.path.isfile(fileName2Ec):
-        urls_found2c = pandas.read_csv(fileName2Ec, sep = ",", header=None) ##May also contain relevant URLs
+        urls_found2c = df.loadCSVfile(fileName2Ec) ##May also contain relevant URLs
     else:
         print(fileName2Ec + " was not found, is this OK?")
-        urls_found2c = []
+        urls_found2c = pandas.DataFrame([])
     
     ##Get result from PDF extraction
-    urls_found3 = pandas.read_csv(fileName3E, sep = ",", header=None)
+    urls_found3 = df.loadCSVfile(fileName3E)
 
     ##Combine findings
     frames = [urls_found1, urls_found2, urls_found2b, urls_found2c, urls_found3]
@@ -737,55 +724,60 @@ if Continue:
     f.write(str(len(urls_found2b)) + " unique other websites links found\n")
 
     ##2. Proccess social media data, in parallel or serial
-    if cores >=2:
-        ##Muliticore test version
-        print("Parallel social media search option is used (max 2 different)")
-        f.write("Parallel social media search option is used (max 2 different)\n")
+    if socialSearch:
+        if cores >=2:
+            ##Muliticore test version
+            print("Parallel social media search option is used (max 2 different)")
+            f.write("Parallel social media search option is used (max 2 different)\n")
 
-        half = round(len(urls_foundSoc)/2)
-        urls_Soc1 = urls_foundSoc[0:half]
-        urls_Soc2 = urls_foundSoc[(half+1):len(urls_foundSoc)]
+            half = round(len(urls_foundSoc)/2)
+            urls_Soc1 = urls_foundSoc[0:half]
+            urls_Soc2 = urls_foundSoc[(half+1):len(urls_foundSoc)]
 
-        ##init output queue
-        out_q = mp.Queue()
+            ##init output queue
+            out_q = mp.Queue()
 
-        ##Init 2 simultanious queries, store output in queue
-        p1 = mp.Process(target = ProcessSocmp, args = (urls_Soc1, 1, out_q))
-        p1.start()
-        p2 = mp.Process(target = ProcessSocmp, args = (urls_Soc2, 2, out_q)) ##Make sure it runs (deal with driver issues)
-        p2.start()
+            ##Init 2 simultanious queries, store output in queue
+            p1 = mp.Process(target = ProcessSocmp, args = (urls_Soc1, 1, out_q))
+            p1.start()
+            p2 = mp.Process(target = ProcessSocmp, args = (urls_Soc2, 2, out_q)) ##Make sure it runs (deal with driver issues)
+            p2.start()
         
-        time.sleep(5)
+            time.sleep(5)
     
-        ##Wait till finished
-        p1.join()
-        p2.join()
+            ##Wait till finished
+            p1.join()
+            p2.join()
     
-        ##Combine results
-        urls_extra_found = []
-        for i in range(2):
-            urls_extra_found.append(out_q.get())
+            ##Combine results
+            urls_extra_found = []
+            for i in range(2):
+                urls_extra_found.append(out_q.get())
 
-        ##Add to urls_found2b
-        for links in urls_extra_found:
-            for url in links:
+            ##Add to urls_found2b
+            for links in urls_extra_found:
+                for url in links:
+                    if not url in urls_found2b:
+                        urls_found2b.append(url)
+        else:
+            print("Serial social media search option is used (1 process)")
+            f.write("Serial social media search option is used (1 process)\n")
+
+            ##Check for country and extra link (compared to urls_found2b)
+            urls_extra_found = ProcessSoc(urls_foundSoc)
+            ##urls_extra_found = list(set(urls_extra_found))
+            ##Add anyrthong thats new
+            for url in urls_extra_found:
                 if not url in urls_found2b:
                     urls_found2b.append(url)
+
+
+        print(str(len(urls_found2b)) + " total number of urls found")
+        f.write(str(len(urls_found2b)) + " total number of urls found\n")
+    
     else:
-        print("Serial social media search option is used (1 process)")
-        f.write("Serial social media search option is used (1 process)\n")
-
-        ##Check for country and extra link (compared to urls_found2b)
-        urls_extra_found = ProcessSoc(urls_foundSoc)
-        ##urls_extra_found = list(set(urls_extra_found))
-        ##Add anyrthong thats nes
-        for url in urls_extra_found:
-            if not url in urls_found2b:
-                urls_found2b.append(url)
-
-
-    print(str(len(urls_found2b)) + " total number of urls found")
-    f.write(str(len(urls_found2b)) + " total number of urls found\n")
+        print("No additional search on social media derived links is performed")
+        f.write("No additional search on social media derived links is performed\n")
 
     ##3. Reduce urls by including domain of urls with 4 or more slashes
     dom_found2b = []
@@ -811,14 +803,20 @@ if Continue:
             if not dom in dom_found2b:
                 dom_found2b.append(dom)
     
+    ##Do final cleanup
+    ##remove nanś and empty strings
+    dom_found2c = [x for x in dom_found2b if not str(x) == 'nan' and not str(x) == '']
+    dom_found2c = list(set(dom_found2c))
+    dom_found2c.sort()
+    
     ##Save list of urls
     fileName4 = "4_external_"+ country.upper() + lang.lower() + "1.csv"
-    totalUrls = pandas.DataFrame(dom_found2b)
+    totalUrls = pandas.DataFrame(dom_found2c)
     totalUrls.to_csv(fileName4, index=False) 
 
     ##Indiacte how many doms are included in checking
-    print(str(len(dom_found2b)) + " total number of domain based urls saved (after slash reduction)")
-    f.write(str(len(dom_found2b)) + " total number of domain based urls saved (after slash reduction)\n")
+    print(str(len(dom_found2c)) + " total number of domain based urls saved (after slash reduction)")
+    f.write(str(len(dom_found2c)) + " total number of domain based urls saved (after slash reduction)\n")
     f.close()
     
     print("4 results file complete prepared for final step")

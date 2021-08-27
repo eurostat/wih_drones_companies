@@ -5,8 +5,9 @@ Created on Tue Jan 26 08:37:51 2021
 
 @author: piet
 
-Updated on July 30 2021, version 3.04
-
+Updated on Aug 9 2021, version 3.09  adjusted getDomain with check for number of split results
+Improved cleanLinks function, extra pandas read option included, adjusted cleanLinks
+Updated domain extenion list
 """
 ##Drone functions file
 
@@ -64,7 +65,7 @@ header = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_3) AppleWeb
 ##check if ovpn files are available
 if os.path.isdir('/etc/openvpn'):
     ##Settings for VPN switching
-    sudoPassword = '<REMOVED>'  ##Put SUDO password here
+    sudoPassword = 'REMOVED'
     usedVPN = []
     maxG = 50 ##maximun number of checks per VPN location (before detected)
 
@@ -84,7 +85,8 @@ outq = queue.Queue()
 ##Regex
 genUrl = r"((?:https?://)?(?:[a-z0-9\-]+[.])?([a-zA-Z0-9_\-]+[.][a-z]{2,4})(?:[a-zA-Z0-9_\-./]+)?)"
 ##define list of other EU countries domain + us, ca, au, sg, china
-euDom = ['ad', 'ae', 'am', 'at', 'au', 'ba', 'be', 'bg', 'br', 'by', 'ca', 'ch', 'cn', 'cy', 'cz', 'de', 'dk', 'ee', 'es', 'fi', 'fo', 'fr', 'gg', 'gi', 'gl', 'gp', 'gr', 'hr', 'hu', 'ie', 'il', 'im', 'is', 'it', 'je', 'jp', 'kr', 'li', 'lt', 'lu', 'lv', 'mc', 'md', 'me', 'mk', 'mt', 'mx', 'nl', 'no', 'nz', 'pm', 'pl', 'pt', 're', 'ro', 'rs', 'ru', 'se', 'sg', 'si', 'sk', 'su', 'tf', 'tr', 'ua', 'uk', 'us', 'wf', 'yt', 'za']
+##euDom = ['ad', 'ae', 'am', 'at', 'au', 'ba', 'be', 'bg', 'br', 'by', 'ca', 'ch', 'cn', 'cy', 'cz', 'de', 'dk', 'ee', 'es', 'fi', 'fo', 'fr', 'gg', 'gi', 'gl', 'gp', 'gr', 'hr', 'hu', 'ie', 'il', 'im', 'is', 'it', 'je', 'jp', 'kr', 'li', 'lt', 'lu', 'lv', 'mc', 'md', 'me', 'mk', 'mt', 'mx', 'nl', 'no', 'nz', 'pk', 'pm', 'pl', 'pt', 're', 'ro', 'rs', 'ru', 'se', 'sg', 'si', 'sk', 'su', 'tf', 'tr', 'ua', 'uk', 'us', 'wf', 'yt', 'za']
+euDom = ['ac', 'ad', 'ae', 'af', 'ag', 'ai', 'al', 'am', 'an', 'ao', 'aq', 'ar', 'as', 'at', 'au', 'aw', 'ax', 'az', 'ba', 'bb', 'bd', 'be', 'bf', 'bg', 'bh', 'bi', 'bj', 'bl', 'bm', 'bn', 'bo', 'bq', 'br', 'bs', 'bt', 'bv', 'bw', 'by', 'bz', 'ca', 'cat', 'cc', 'cd', 'cf', 'cg', 'ch', 'ci', 'ck', 'cl', 'cm', 'cn', 'co', 'cr', 'cu', 'cv', 'cw', 'cx', 'cy', 'cz', 'de', 'dj', 'dk', 'dm', 'do', 'dz', 'ec', 'ee', 'eg', 'eh', 'er', 'es', 'et', 'eu', 'fi', 'fj', 'fk', 'fm', 'fo', 'fr', 'ga', 'gal', 'gb', 'gd', 'ge', 'gf', 'gg', 'gh', 'gi', 'gl', 'gm', 'gn', 'gp', 'gq', 'gr', 'gs', 'gt', 'gu', 'gw', 'gy', 'hk', 'hm', 'hn', 'hr', 'ht', 'hu', 'id', 'ie', 'il', 'im', 'in', 'io', 'iq', 'ir', 'is', 'it', 'je', 'jm', 'jo', 'jp', 'ke', 'kg', 'kh', 'ki', 'km', 'kn', 'kp', 'kr', 'kw', 'ky', 'kz', 'la', 'lb', 'lc', 'li', 'lk', 'lr', 'ls', 'lt', 'lu', 'lv', 'ly', 'ma', 'mc', 'md', 'me', 'mf', 'mg', 'mh', 'mk', 'ml', 'mm', 'mn', 'mo', 'mp', 'mq', 'mr', 'ms', 'mt', 'mu', 'mv', 'mw', 'mx', 'my', 'mz', 'na', 'nc', 'ne', 'nf', 'ng', 'ni', 'nl', 'no', 'np', 'nr', 'nu', 'nz', 'om', 'pa', 'pe', 'pf', 'pg', 'ph', 'pk', 'pl', 'pm', 'pn', 'pr', 'ps', 'pt', 'pw', 'py', 'qa', 're', 'ro', 'rs', 'ru', 'rw', 'sa', 'sb', 'sc', 'sd', 'se', 'sg', 'sh', 'si', 'sj', 'sk', 'sl', 'sm', 'sn', 'so', 'sr', 'ss', 'st', 'sv', 'sx', 'sy', 'sz', 'tc', 'td', 'tf', 'tg', 'th', 'tj', 'tk', 'tl', 'tm', 'tn', 'to', 'tp', 'tr', 'tt', 'tv', 'tw', 'tz', 'ua', 'ug', 'uk', 'us', 'uy', 'uz', 'va', 'vc', 've', 'vg', 'vi', 'vn', 'vu', 'wf', 'ws', 'ye', 'yt', 'za', 'zm', 'zw']
 ##list is not complete yet (but it is for Europe), added nz kr ae
 
 ##list of country names (n English as a first test)
@@ -194,9 +196,8 @@ def checkUrls(url):
     ##1. Check for multiple http
     if url.count('http') > 1:
         ##Split links
-        urls = url.split('http')
-        urls.remove('')
-        urls = ['http' + x for x in urls]
+        urls = url.split('http')        
+        urls = ['http' + x for x in urls if not x == '']
         for url1 in urls:
             url1 = url1.strip()
             ##Check for empty
@@ -560,14 +561,22 @@ def createsoup2(site):
 def getDomain(url, prefix = True):
     top = ""
     if len(url) > 0:
-        if url.find("/") > 0:
-            ##remove any ? containing part (may be added to url)
-            url = url.split('?')[0]
-            ##Get domain name
-            top = url.split('/')[2]
-            ##add prefix
-            if prefix:
-                top = url.split('/')[0] + '//' + top
+        if url.find("/") > 0 and url.startswith("http"):
+            try:##remove any ? containing part (may be added to url)
+                url = url.split('?')[0]
+                ##Split url
+                res = url.split("/")
+                ##Check length of result (should at least be three 1. http: 2. //  3. domain.name
+                if len(res) > 2:
+                    top = res[2]
+                    ##add prefix
+                    if prefix:
+                        top = res[0] + '//' + top
+                else:
+                    top = url
+            except:
+                ##An error occured, url is likely not composed as it should be
+                top = ""
         else:
             top = url
     return(top)
@@ -2814,6 +2823,11 @@ def cleanLinks(links, country, checkCount = True):
         links2 = []
         ##remove anythng after & and check for near similarity (www. missing etc)
         for link in links:
+            ##remove leading and lagging spaces
+            link = link.strip()
+            ##Remove quotes
+            link = link.replace('"', '')
+            link = link.replace("'", "")
             ##convert to lower
             link = link.lower()
             ##remove part starting at &
@@ -2831,6 +2845,8 @@ def cleanLinks(links, country, checkCount = True):
             ##remove www. section for html files (NOT FOR PDF_FILES)
             if link.find('www.') > 0 and not link.lower().find('pdf') > 0: 
                 link = link.replace('www.', '')
+            if not link.startswith("http"):
+                link = "http://" + link
             ##Check for domain slash duplciates
             if link == getDomain(link) + "/":
                 link = getDomain(link)
@@ -2851,13 +2867,38 @@ def cleanLinks(links, country, checkCount = True):
 
     ##Return result        
     return(links1a, links1b)
-    
+
+##Read CSV file and return pandas dataframe (with error and alternative reading way)    
 def loadCSVfile(fileName):
     fileContent = ''
     try:
         ##Check if file existst
         if os.path.exists(fileName):
             fileContent = pandas.read_csv(fileName, sep = ";", header=None)
+    except:
+        ##An error occured, check alternative read
+        pass
+    finally:
+        ##Check for pandas reading error (empty dataframe) and use another way to read data
+        if len(fileContent) == 0 and os.path.exists(fileName):
+            fileContent = _loadCSVfile2(fileName)
+        return(fileContent)
+
+##Alternative way to obtainf csv content and return pandas dataframe
+def _loadCSVfile2(fileName):
+    fileContent = ''
+    try:
+        ##Check if file existst
+        if os.path.exists(fileName):
+            ##read file
+            lines = []
+            with open(fileName) as f:
+                lines = f.readlines()
+            f.close()
+            ##replace \n at end of lines
+            lines2 = [x.replace('\n', '') for x in lines]
+            ##Convert to pandas dataframe
+            fileContent = pandas.DataFrame(lines2)
     except:
         ##An error occured
         pass

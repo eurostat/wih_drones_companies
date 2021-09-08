@@ -20,65 +20,144 @@ from nltk.tokenize import sent_tokenize, word_tokenize
 import re
 import wordfreq
 import pandas as pd
+import numpy as np
+import sys
 
-response = requests.get(url="https://en.wikipedia.org/wiki/Unmanned_aerial_vehicle")
+# Extracts keywords from a website
+#
+# Arguments:
+# - url url
+# - min_count minimum word count required to be in included in the list
+# - filename filename of the csv file
+# - language language (in lowercase, known by nltk)
+#
+# Method
+# - words are collected, stopwords removes
+# - per word, relative frequency is calculated (freqDoc): occurrences / total words
+# - per word, relative frequency in the Exquisite Corpus (https://github.com/LuminosoInsight/exquisite-corpus, used by wordfreq) is calculated (freqExCorp)
+# - words are stemmed
+# - words are grouped per stem (freDoc and freqExCrop are summed)
+# - per stem, freqRatio = freqDoc / freqExCrop is calculated. Example: for the word 'applic' the freqRatio is 31. This means that the unstemmed variants ('application', 'applications', 'applicable') occur 31 times more in this website than in the corpus.
+#
+# Output: csv table with:
+# - stem
+# - count
+# - freqDoc
+# - freqExCorp
+# - freqRatio
+# - words (the unstemmed words, sorted by occurrence in the corpus (descending))
+def extract_keyword_profile(url, min_count=5, filename=None, language='english'):
+    response = requests.get(url=url)
+    soup = BeautifulSoup(response.content, 'html.parser')
 
-soup = BeautifulSoup(response.content, 'html.parser')
+    # not needed?
+    #title = soup.find(id="firstHeading")
+    #print(title.string)
 
-title = soup.find(id="firstHeading")
-print(title.string)
+    # Extract the plain text content from paragraphs
+    paras = []
+    for paragraph in soup.find_all('p'):
+        paras.append(str(paragraph.text))
+
+    # Extract text from paragraph headers
+    heads = []
+    for head in soup.find_all('span', attrs={'mw-headline'}):
+        heads.append(str(head.text))
+
+    # Interleave paragraphs & headers
+    # text = [val for pair in zip(paras, heads) for val in pair]
+
+    # Combine heads and paragraphs
+    text = heads + paras
+    text = ' '.join(text)
+
+    # Drop footnote superscripts in brackets
+    text = re.sub(r"\[.*?\]+", '', text)
+
+    # Replace '\n' (a new line) with ''
+    text = text.replace('\n', '')
+    # print(text)
+
+    nltk.download('punkt',quiet=True)
+    nltk.download('stopwords',quiet=True)
+
+    words = word_tokenize(text, language=language)
+    words = [word.lower() for word in words]
+    words = [word for word in words if not word in stopwords.words(language)]
+    words = [word for word in words if word.isalnum() and not word.isnumeric()]
+
+    stemmer = nltk.stem.SnowballStemmer(language)
+
+    # find word stems (one for each word)
+    wstems = [stemmer.stem(word) for word in words]
+
+    # put in a dictionary (one item per stem)
+    nested_stems = {}
+    for stem in np.unique(wstems):
+        nested_stems[stem] = [words[i] for i in range(len(wstems)) if wstems[i] == stem]
+
+    # remove duplicates for each item
+    nested_stems2 = {}
+    for key, value in nested_stems.items():
+        nested_stems2[key] = list(np.unique(value))
+
+    # put in a list
+    nested_stems3 = []
+    for n in nested_stems2.values():
+        nested_stems3.append(n)
+
+    # count words and put in dictionary
+    freq = []
+    for w in words:
+        freq.append(words.count(w))
+    d = dict(zip(words, freq))
+    d = {k: v for k, v in sorted(d.items(), key=lambda item: item[1], reverse=True)}
+    df = pd.DataFrame(list(d.items()), columns=['word', 'count'])
 
 
-# Extract the plain text content from paragraphs
-paras = []
-for paragraph in soup.find_all('p'):
-    paras.append(str(paragraph.text))
+    df['stem'] = [stemmer.stem(word) for word in df['word']]
+    df['freqExCorp'] = [(wordfreq.word_frequency(k, 'en')) for k, v in d.items()]
+    df['freqDoc'] = df['count'] / sum(df['count'])
+    df2 = df.groupby('stem', as_index=False).sum()
 
-# Extract text from paragraph headers
-heads = []
-for head in soup.find_all('span', attrs={'mw-headline'}):
-    heads.append(str(head.text))
+    allequal = all(map(lambda x, y: x == y, df2['stem'].to_list(), list(nested_stems2.keys())))
+    if not allequal:
+        sys.exit("stems not equal")
 
-# Interleave paragraphs & headers
-text = [val for pair in zip(paras, heads) for val in pair]
-text = ' '.join(text)
+    # order words per stem-group (starting with the most popular)
+    nested_stems4 = []
+    for wrds in nested_stems3:
+        wrds_freq=[df[df['word']==w]['freqExCorp'].to_list()[0] for w in wrds]
+        wrds_freq_rev=[w * -1 for w in wrds_freq]
+        ind=np.argsort(wrds_freq_rev)
+        wrds2 = [wrds[i] for i in ind]
+        nested_stems4.append(wrds2)
 
-# Drop footnote superscripts in brackets
-text = re.sub(r"\[.*?\]+", '', text)
+    df2['words'] = nested_stems4
 
-# Replace '\n' (a new line) with ''
-text = text.replace('\n', '')
-print(text)
+    df2['freqRatio'] = df2['freqDoc'] / df2['freqExCorp']
+    df2 = df2.sort_values(by=['freqRatio'], ascending=False)
 
+    df2 = df2[(df2['count'] > min_count) & (df2['freqExCorp'] > 0)]
 
+    df2.reset_index(drop=True)
 
-nltk.download('punkt')
-nltk.download('stopwords')
+    df2['freqRatio'] = round(df2['freqRatio'], 2)
+    df2['freqExCorp'] = round(df2['freqExCorp'], 9)
+    df2['freqDoc'] = round(df2['freqDoc'], 9)
 
-words = word_tokenize(text)
-words = [word.lower() for word in words]
-words = [word for word in words if not word in stopwords.words()]
-words = [word for word in words if word.isalnum()]
+    df2 = df2[['stem', 'count', 'freqDoc', 'freqExCorp', 'freqRatio', 'words']]
 
-#porter = PorterStemmer()
-#lancaster = LancasterStemmer()
-
-#wordsP = [porter.stem(word) for word in words]
-#wordsL = [lancaster.stem(word) for word in words]
-
-freq = []
-for w in words:
-    freq.append(words.count(w))
+    if filename is not None:
+        df2.to_csv(filename, index=False)
+    return df2
 
 
-d = dict(zip(words, freq))
-d = {k: v for k, v in sorted(d.items(), key=lambda item: item[1], reverse= True)}
+df = extract_keyword_profile(url="https://en.wikipedia.org/wiki/Unmanned_aerial_vehicle", filename="UAV.csv")
+df = extract_keyword_profile(url="https://es.wikipedia.org/wiki/Veh%C3%ADculo_a%C3%A9reo_no_tripulado", filename="UAV_es.csv", language="spanish")
+df = extract_keyword_profile(url="https://nl.wikipedia.org/wiki/Onbemand_luchtvaartuig", filename="UAV_nl.csv", language="dutch")
 
-df = pd.DataFrame(list(d.items()), columns=['word', 'count'])
-df['freq'] = [(wordfreq.word_frequency(k, 'en')) for k, v in d.items()]
-df = df[(df.freq != 0)]
 
-df['freqDoc'] = df['count'] / sum(df['count'])
 
-df['freqComp'] = df['freqDoc'] / df['freq']
-df = df.sort_values(by=['freqComp'], ascending=False)
+df = extract_keyword_profile(url="https://en.wikipedia.org/wiki/Fender_Stratocaster", filename="Stratocaster.csv")
+df = extract_keyword_profile(url="https://r-tmap.github.io/tmap-book/nutshell.html", filename="tmap.csv")

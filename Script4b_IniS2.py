@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-##Nov 4 2021, version 1.5 ##Adjuste processing to speed everythig up, with try except
+##Dec 7 2021, version 1.6 ##Adjuste processing to speed everythig up, with try except
 ##Uses DataFrame to process social media and update location (enables reloading of temperary _int.csv file) solves global_soc_dom issue
 ## Check urls found, input is a list of urls, first part of script4 only goes as afar as to check social media for additional urls
 ## Version with startPosition as input 
@@ -188,6 +188,7 @@ def preprocessText(text):
 
     return(test)
 
+##Function to check location of website
 def detectLocationCountry(text):
     ##preprocess text
     text1 = preprocessText(text)
@@ -206,6 +207,32 @@ def detectLocationCountry(text):
         ##Check findings 
         if len(included) > 0:
             inCountry = True
+        else:
+            ##Check fully capital words
+            included = list(filter(lambda x: re.findall(" " + x.upper() + " ", text1), municL)) 
+            ##Check findings 
+            if len(included) > 0:
+                inCountry = True
+        
+    ##If nothing has been found, try US states
+    if inCountry == None:
+        ##print("Checking US locations")
+        ##Check if country name is mentioned on web page
+        if any(" " + x + " " in text1.lower() for x in USstatesNames):
+            ##State detected
+            inCountry = False
+        elif any(" " + x + " " in text1 for x in USstatesAbr):
+            ##State abbreviation detected
+            inCountry = False ##Source or error?
+    
+    ##If nothing has been found, try list of largest city names (excluded names of cities in Country)
+    if inCountry == None:
+        ##print("Checking world city names")
+        ##Check if country name is mentioned on web page (all lowercase comparison)
+        if any(" " + x.lower() + " " in text1.lower() for x in LargeCityNames):
+            ##City detected, must be in other country
+            inCountry = False   
+    
     ##return findings
     return(inCountry)
 
@@ -674,6 +701,24 @@ def ProcessLinks2(urls_found, socialCheck = False):
                             ##WHen NO location is found, check via links on page (if included)
                             inter, exter = df.extractLinks(soup, vurl, False)
                             dom = df.getDomain(vurl)
+                            
+                            ##In case inter is empty and exter not get dom part
+                            if len(inter) == 0 and len(exter) > 0:
+                                ##Check external links for domain
+                                for ex in exter:
+                                    if ex.lower().startswith(dom):
+                                        if not ex.lower() in inter:
+                                            inter.append(ex.lower())
+                        
+                            ##remove dom and dom + "/" links
+                            if dom in inter:
+                                inter.remove(dom)
+                            if dom + "/" in inter:
+                                inter.remove(dom + "/")
+                            
+                            ##remove any pdf links
+                            inter = [x for x in inter if x.lower().find(".pdf") == -1]
+                        
                             ##sort links (look at the short urls first)
                             inter2 = list(sorted(inter, key = len))
                             interCount = 0
@@ -841,6 +886,14 @@ if Continue and not fileName == '':
         ##Check if vars are all available
         if len(country) > 0 and len(lang) > 0 and len(str(countryW1)) > 0 and len(str(countryW2)) > 0 and len(str(drone_words)) > 0 and len(str(runParallel)) > 0 and len(cityNameFile) > 0:
             print("All variables from ini-file checked")
+            
+        ##Add international (english) contact words, if not already included
+        if not "contact" in cont_words:
+            cont_words.append("contact")
+        if not "about" in cont_words:
+            cont_words.append("about")
+        if not "impress" in cont_words:
+            cont_words.append("impress") ##impressum generic word
         
     except:
         ##An erro has occured
@@ -858,6 +911,7 @@ if Continue:
     import Drone_functions as df 
         
     try: 
+        ##get files used to check locations 
         #get municipalities of Country
         municl = df.loadCSVfile(cityNameFile) ##Need plaatsnamen lijst hier
         municl2 = list(municl.iloc[:,0])
@@ -875,6 +929,21 @@ if Continue:
         for name in countryNames:
             if name in wCountries1:
                 wCountries1.remove(name)
+        
+        ##Get US states data
+        USstates = df.loadCSVfile("USstates.csv")
+        USstatesNames = list(USstates[0])
+        USstatesAbr = list(set(list(USstates[1])))
+    
+        ##Largeste cities in the world list
+        LargeCities = df.loadCSVfile("Largest_cities.csv")
+        ##remove cities from country studied
+        for name in countryNames:
+            LargeCities = LargeCities[LargeCities[1] != name]
+        ##get city names NOT in country studies
+        LargeCityNames = list(LargeCities[0])
+        ##Sort on length reversed
+        LargeCityNames.sort(key = len, reverse = True)    
 
     except:
         ##An error occured

@@ -65,7 +65,7 @@ header = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_3) AppleWeb
 ##check if ovpn files are available
 if os.path.isdir('/etc/openvpn'):
     ##Settings for VPN switching
-    sudoPassword = '<<Removed>>'
+    sudoPassword = '<<REMOVED>>'
     usedVPN = []
     maxG = 50 ##maximun number of checks per VPN location (before detected)
 
@@ -99,7 +99,7 @@ worldCountries = ['Afghanistan','Albania','Algeria','Andorra','Angola','Antigua 
 ##Init chromium
 ##UBUNTU STYLE LOCATION
 CHROME_PATH = '/usr/bin/google-chrome'
-CHROMEDRIVER_PATH = '/user/bin/chromedriver'
+CHROMEDRIVER_PATH = '/usr/bin/chromedriver' ##/usr/local/bin/chromedriver
 chrome_options = Options()  
 chrome_options.add_argument("--headless") 
 chrome_options.add_argument("--disable-gpu")   

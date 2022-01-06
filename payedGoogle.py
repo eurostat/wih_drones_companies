@@ -4,8 +4,9 @@
 Created on Thu Apr 29 12:42:08 2021
 
 @author: Piet Daas
-Updated on Aug 5 2021, version 1.02 reversed PDF name search
+Updated on Oct 19 2021, version 1.1 reversed PDF name search, includes GoogleK
 """
+
 ##Separat google scrape via PAID value SERP account
 ##Set correct API_KEY prior to use in code that import this file
 ##import payedGoogle as pg
@@ -293,3 +294,82 @@ def searchPDFlink(url, country):
                     break
         
     return(vurl)
+
+##function used for URLsearch of names of companies and country    
+def queryGoogleK(query, country):
+    ##Check if api_key has a value
+    if not _api_key_ == "":
+        urls_found = []    
+    
+        query = query.lower()
+    
+        # set up the request parameters
+        params = {
+            'api_key': _api_key_,
+            'q' : query,
+            'google_domain' : 'google.' + country,
+            'filter' : '0'
+        }
+
+        ## Do first requests
+        api_result = requests.get('https://api.valueserp.com/search', params)
+
+        ## Extract links and next page from JSON resultP
+        result = api_result.json()
+
+        ##Check if all worked well
+        res = result['request_info']
+                
+        ##Check for succes
+        if res['success']:
+            link = ''
+            link3 = ''
+        
+            ##get catagroeis on which data is retruned
+            catg = [x for x in result]
+        
+            ##Check if knowledge graph input is available
+            if 'knowledge_graph' in catg:
+                result2 = result['knowledge_graph']
+                ##get catgs in result2
+                catg2 = [x for x in result2]            
+                if 'website' in catg2:
+                    link = result2['website']
+                    ##print("Knowledge graph link")
+        
+            ##Check the links found
+            if 'organic_results' in catg:
+                ##Get first hit in organic_results part
+                result2 = result['organic_results']
+                ##get links from first page
+                for i in result2:
+                    ##get link
+                    link2 = i['link']
+                    if not link2 in urls_found:
+                        urls_found.append(link2)
+                
+            ##show progress
+            ##print(str(len(urls_found)) + " links found Google payed")
+        
+            ##Choose best link from urls_found
+            if link == '' and len(urls_found) > 0:
+                ##Flatten list
+                link3 = "".join(x + "," for x in urls_found)
+                ##print("First organic link selected")
+            elif not link == '' and len(urls_found) > 0:
+                ##Ad urls_fund to link
+                link3 = link + "," + "".join(x + "," for x in urls_found)
+            else:
+                link3 = link
+        else:
+            ##Scraping failed, check reason
+            if res['topup_credits_remaining'] <= 0:
+                print("Credit has become 0, pay for new queries")
+            else:
+                print("No access to API")
+        return(link3)    
+    else:
+        print("Provide an _api_key_")
+
+
+

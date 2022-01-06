@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-##Aug 12 2021, version 1.15 ##Adjuste processing to speed everythig up, with try except
+##Dec 7 2021, version 1.6 ##Adjuste processing to speed everythig up, with try except
 ##Uses DataFrame to process social media and update location (enables reloading of temperary _int.csv file) solves global_soc_dom issue
 ## Check urls found, input is a list of urls, first part of script4 only goes as afar as to check social media for additional urls
 ## Version with startPosition as input 
 ##with updated location search (inlcude text preprocessing and spaceses added to names)
-##Included option to in- or exclude social media based search
+##Included option to in- or exclude social media based search, and extra url2 checks, and second check after Error (deal with multiple check issue)
+##deals with new social media derived links in a correct way
+##CSV-file produced contains processed text from main page of vurl, to be used for classification
 
 #Load libraries 
 import os
@@ -18,9 +20,12 @@ import random
 import multiprocessing as mp
 import numpy as np
 import configparser
+import langdetect
 
 ##Get directory
 localDir = os.getcwd()
+##Dir if saveHtml is set to true
+localHtml = ""
 
 ##get regex for url matching in documents
 genUrl = r"((?:https?://)?(?:[a-z0-9\-]+[.])?([a-zA-Z0-9_\-]+[.][a-z]{2,4})(?:[a-zA-Z0-9_\-./]+)?)"
@@ -51,7 +56,117 @@ class inCountry(object):
     def __repr__(self):
         return "inCountry(%s)" % self.value
 
-## DEFINE FUNCTIONS
+##Store soup as html
+def storeSoup(soup, vurl):
+    ## store soup in html file
+    stat = 0
+    if not soup == 0:
+        try:            
+            ##remove last slahs if included
+            vurl = vurl.strip()
+            if vurl.endswith("/"):
+                vurl = vurl[0:-1]
+            
+            ##Create filename
+            fileName = vurl.replace("://", "_")
+            fileName = fileName.replace(".", "_")
+            fileName = fileName.replace("/", "$")
+            fileName = localHtml + "/" + fileName + ".html"
+            
+            ##Check if file already exists
+            if not os.path.isfile(fileName):
+                with open(fileName, "w", encoding='utf-8') as file:
+                    file.write(str(soup))
+                stat = 1
+            else:
+                stat = 0
+                
+        except:
+            stat = 0    
+            
+    return stat     
+
+##Get html tags
+def gethtmltags(soup):
+    ''' search for all html tags used in this website '''
+    list_html_tags = []
+    for tag in soup.find_all():
+        list_html_tags.append(tag.name)
+    list_html_tags = set(list_html_tags)
+    
+    return list_html_tags
+
+##Extract visible text from soup (remove any scripts and styles)
+def visibleText(soup):
+    ''' kill all the scripts and style and return texts '''
+    for script in soup(["script", "style"]):
+        script.extract()    # rip it out
+    text = soup.get_text()
+    ##split text
+    lines = (line.strip() for line in text.splitlines())
+    chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+    text = ' '.join(chunk for chunk in chunks if chunk)
+    
+    return text
+
+def processText(text, tags):
+    wordsText = ""
+    text_lang = ""
+    if len(text) != 0:
+        ##Try to determine language
+        try:
+            ##determine language (2 options language as in ini-file or english)
+            text_lang = langdetect.detect(text)
+            if text_lang == language or text_lang == "english":
+                ##these are allowed languages
+                pass
+            else:
+                ##Any other language should be set to english
+                text_lang = "english" 
+        except:
+            text_lang = language 
+        
+        ##Convert text (KEEP CASE)
+        words = text.split()
+        for word in words:
+            ##remove digits and punctuationmarks, but keep letters and diacretics ones
+            word = re.compile('[^\D]').sub(' ', word) ##replace digits with space
+            word = re.compile('[\W_]').sub(' ', word) ##replace punctiation marks
+            ##remove stopwords for language
+            if not word in nltk.corpus.stopwords.words(text_lang):                
+                for w in word.split():
+                    ##only keep words of 2 and more characters
+                    if len(w) > 1:
+                        if not w in tags:
+                            wordsText += " " + w.strip()
+    
+    ##Remove leading and lagging texts
+    wordsText = wordsText.strip()    
+    
+    ##return cleaned text and language detected
+    return wordsText, text_lang
+
+##Convert to text and store
+def convertSoup(soup):
+    text = ""
+    text_lang = language ##default from ini-file
+    
+    ##Process content
+    if len(str(soup)) > 1:
+        try:
+            ##Extract visible and relevan words from soup and determine language
+            html_tags = gethtmltags(soup)
+            text = visibleText(soup)
+            text, text_lang = processText(text, html_tags)
+                   
+        except:
+            ##An error occured
+            text_lang = ""
+    else:
+        text_lang = ""
+        
+    return text, text_lang
+
 ##replace characters with character with leading laggign space
 def preprocessText(text):
     test = ' '
@@ -73,6 +188,7 @@ def preprocessText(text):
 
     return(test)
 
+##Function to check location of website
 def detectLocationCountry(text):
     ##preprocess text
     text1 = preprocessText(text)
@@ -91,6 +207,32 @@ def detectLocationCountry(text):
         ##Check findings 
         if len(included) > 0:
             inCountry = True
+        else:
+            ##Check fully capital words
+            included = list(filter(lambda x: re.findall(" " + x.upper() + " ", text1), municL)) 
+            ##Check findings 
+            if len(included) > 0:
+                inCountry = True
+        
+    ##If nothing has been found, try US states
+    if inCountry == None:
+        ##print("Checking US locations")
+        ##Check if country name is mentioned on web page
+        if any(" " + x + " " in text1.lower() for x in USstatesNames):
+            ##State detected
+            inCountry = False
+        elif any(" " + x + " " in text1 for x in USstatesAbr):
+            ##State abbreviation detected
+            inCountry = False ##Source or error?
+    
+    ##If nothing has been found, try list of largest city names (excluded names of cities in Country)
+    if inCountry == None:
+        ##print("Checking world city names")
+        ##Check if country name is mentioned on web page (all lowercase comparison)
+        if any(" " + x.lower() + " " in text1.lower() for x in LargeCityNames):
+            ##City detected, must be in other country
+            inCountry = False   
+    
     ##return findings
     return(inCountry)
 
@@ -449,26 +591,6 @@ def PreProcessList(urls_list, country):
 
     return(urls_cleaned2a)
 
-##get top 10 words in text
-def getTop10Words(text):    
-    words10 = ""
-    ##Check input
-    if len(text) > 0:
-        ##Get top 10 words
-        words = text.lower().split(" ")
-        words = [x for x in words if len(x) > 1 and not x in nltk.corpus.stopwords.words(language)]
-        ##get wordfrequency
-        wordfreq = [words.count(w) for w in words]
-        wordDict = dict(list(zip(words,wordfreq)))            
-        ##convert to list and sort wordFerq
-        wordDict2 = [(wordDict[key], key) for key in wordDict]
-        wordDict2.sort()
-        wordDict2.reverse()
-        ##get top 10 as string
-        words10 = ' '.join(str(x) for x in wordDict2[0:10])
-                                
-    return(words10)
-
 ##Specific social media check to detect location (used single core)
 def socCheckLoc(soup, vurl):
     inCountry = None
@@ -509,15 +631,15 @@ def socCheckLoc(soup, vurl):
 def ProcessLinks2(urls_found, socialCheck = False):
     ##Init vars
     result = []
+    urls_Error = []    
     count = 0
     for url in urls_found:    
         ##init vars
         vurl = ''
         ##set tristate of Country to unknonw (None)
         inCountry = None
-        score = "0"
-        action = ""
-        words10 = ""
+        text_lang = ""
+        textP = ""
         soup = 0 ##Is this needed
         
         ##remove last / if included
@@ -526,27 +648,19 @@ def ProcessLinks2(urls_found, socialCheck = False):
  
         ##Check if url needs to be chekced
         if not url == '' and not url == 'nan' and not url.endswith('.jpg') and not url.endswith('.jpeg'):
-            try:
-                ##1. Check if url exists
+            try:                
+                ##1. Check url
+                ##First attempt
                 soup, vurl = df.createsoup(url)        
         
                 ##1b. Check if something is found
                 if soup == 0:
-                    ##Check for leading www.
-                    if not url.lower().find("www.") > 0 and not vurl.lower().find("www.") > 0:
-                        ##Add leading www.
-                        url = url.replace("://", "://www.")
-                        ##Check if adjusted url exists
-                        soup, vurl = df.createsoup(url)
-                        
-                    ##If still nothing is found, you may need to redirect the url
-                    if soup == 0:
-                        ##Get redirected url
-                        url2 = df.getRedirect(url)
-                        if not url2 == url:
-                            ##Check if aurl2
-                            soup, vurl = df.createsoup(url2)
-        
+                    ##Get redirected url
+                    url2 = df.getRedirect(url, True) 
+                    if not url2 == url:
+                        ##Check for url2 (second attempt)
+                        soup, vurl = df.createsoup(url2)                        
+                         
                 ##1c. Check vurl
                 if len(vurl) > 0: ##crashes at this check
                     ##1b. Check for potential social media urls (will be processed later)
@@ -562,6 +676,11 @@ def ProcessLinks2(urls_found, socialCheck = False):
                 ##1c. Check if something is found
                 if len(str(soup)) > 1:
             
+                    ##Check saveHtml
+                    if saveHtml:
+                        ##Save soup as html-file
+                        act = storeSoup(soup, vurl)
+            
                     ##2. get text do NOT convert to lower
                     text = df.visibletext(soup, False)
             
@@ -574,7 +693,7 @@ def ProcessLinks2(urls_found, socialCheck = False):
                             #In country studied
                             inCountry = True
                         else:
-                            ##Check text
+                            ##Check text for country detection
                             inCountry = detectLocationCountry(text)
                     
                         ##If No answer yet, check soup                                        
@@ -582,6 +701,24 @@ def ProcessLinks2(urls_found, socialCheck = False):
                             ##WHen NO location is found, check via links on page (if included)
                             inter, exter = df.extractLinks(soup, vurl, False)
                             dom = df.getDomain(vurl)
+                            
+                            ##In case inter is empty and exter not get dom part
+                            if len(inter) == 0 and len(exter) > 0:
+                                ##Check external links for domain
+                                for ex in exter:
+                                    if ex.lower().startswith(dom):
+                                        if not ex.lower() in inter:
+                                            inter.append(ex.lower())
+                        
+                            ##remove dom and dom + "/" links
+                            if dom in inter:
+                                inter.remove(dom)
+                            if dom + "/" in inter:
+                                inter.remove(dom + "/")
+                            
+                            ##remove any pdf links
+                            inter = [x for x in inter if x.lower().find(".pdf") == -1]
+                        
                             ##sort links (look at the short urls first)
                             inter2 = list(sorted(inter, key = len))
                             interCount = 0
@@ -615,18 +752,9 @@ def ProcessLinks2(urls_found, socialCheck = False):
                         ##2c. Get top 10 words if location is True or unknown
                         ##Only continue when location is in country or unknown
                         if not inCountry == False:        
-                            ##3. Word inspection of text  
-                            droneW1 = sum([text.lower().count(w) for w in droneW])
-                            aerialW1 = sum([text.lower().count(w) for w in aerialW])
-                            waterW1 = sum([text.lower().count(w) for w in waterW])            
-                            busW1 = sum([text.lower().count(w) for w in busW])
-                            contactW1 = sum([text.lower().count(w) for w in contactW])
-                            ##drone compa droneW > 0, aerialW > 0 busW > 0 contactW > 0
-                            score = str(droneW1) + " " + str(aerialW1) + " " + str(waterW1) + " " + str(busW1) + " " + str(contactW1)
-                                
-                            ##Get top 10 words
-                            words10 = getTop10Words(text)
-                    
+                            ##3 Extract and process words from text from soup and determine language
+                            textP, text_lang = convertSoup(soup)
+                            
                         else:
                             ##Website not in country
                             action = "not in country"
@@ -639,12 +767,20 @@ def ProcessLinks2(urls_found, socialCheck = False):
                         action = "web site does not respond"
             except:
                 print("Error occured in: " + str(url) + " " + str(vurl))
-                action = "an error has occured"        
+                action = "an error has occured"   
+                ##Check if this url needs to be checked agin (add to end of list ONCE)
+                if not url in urls_Error and not url == "" and not vurl in urls_Error and not vurl == "":
+                    ##Add to error urls (to prvent multiple processing)
+                    urls_Error.append(url)
+                    urls_Error.append(vurl)
+                    ##Add to urls_found (so they can be checked again)
+                    print("Adding to list of urls to check again")
+                    urls_found.append(url)
         else:
             action = "url does not have to be checked"
         
         ##Add findings to result list (only first occurences of websites will be included)
-        result.append([url, vurl, inCountry, score, words10, action])    
+        result.append([url, vurl, inCountry, text_lang, textP, action])    
         
         ##show progress
         count += 1        
@@ -738,15 +874,9 @@ if Continue and not fileName == '':
         countryW1 = config.get('SETTINGS4', 'countryW1').split(',')
         countryW2 = config.get('SETTINGS4', 'countryW2').split(',')
         drone_words = config.get('SETTINGS4', 'drone_words').split(',')
-        mem_words = config.get('SETTINGS4', 'mem_words').split(',')
         cont_words = config.get('SETTINGS4', 'cont_words').split(',')
-        droneW = config.get('SETTINGS4', 'droneW').split(',')
-        aerialW = config.get('SETTINGS4', 'aerialW').split(',')
-        waterW = config.get('SETTINGS4', 'waterW').split(',')
-        busW = config.get('SETTINGS4', 'busW').split(',')
-        contactW = config.get('SETTINGS4', 'contactW').split(',')
-        
         runParallel = config.getboolean('SETTINGS4', 'runParallel')
+        saveHtml = config.getboolean('SETTINGS4', 'saveHtml')
         socialSearch = config.getboolean('SETTINGS4', 'socialSearch')        
         cityNameFile = config.get('SETTINGS4', 'cityNameFile')
         countryNames = config.get('SETTINGS4', 'countryNames').split(',')
@@ -754,8 +884,16 @@ if Continue and not fileName == '':
         print("Ini-file settings loaded")
         
         ##Check if vars are all available
-        if len(country) > 0 and len(lang) > 0 and len(str(countryW1)) > 0 and len(str(countryW2)) > 0 and len(str(drone_words)) > 0 and len(str(mem_words)) > 0 and len(str(runParallel)) > 0 and len(cityNameFile) > 0:
+        if len(country) > 0 and len(lang) > 0 and len(str(countryW1)) > 0 and len(str(countryW2)) > 0 and len(str(drone_words)) > 0 and len(str(runParallel)) > 0 and len(cityNameFile) > 0:
             print("All variables from ini-file checked")
+            
+        ##Add international (english) contact words, if not already included
+        if not "contact" in cont_words:
+            cont_words.append("contact")
+        if not "about" in cont_words:
+            cont_words.append("about")
+        if not "impress" in cont_words:
+            cont_words.append("impress") ##impressum generic word
         
     except:
         ##An erro has occured
@@ -773,6 +911,7 @@ if Continue:
     import Drone_functions as df 
         
     try: 
+        ##get files used to check locations 
         #get municipalities of Country
         municl = df.loadCSVfile(cityNameFile) ##Need plaatsnamen lijst hier
         municl2 = list(municl.iloc[:,0])
@@ -790,6 +929,21 @@ if Continue:
         for name in countryNames:
             if name in wCountries1:
                 wCountries1.remove(name)
+        
+        ##Get US states data
+        USstates = df.loadCSVfile("USstates.csv")
+        USstatesNames = list(USstates[0])
+        USstatesAbr = list(set(list(USstates[1])))
+    
+        ##Largeste cities in the world list
+        LargeCities = df.loadCSVfile("Largest_cities.csv")
+        ##remove cities from country studied
+        for name in countryNames:
+            LargeCities = LargeCities[LargeCities[1] != name]
+        ##get city names NOT in country studies
+        LargeCityNames = list(LargeCities[0])
+        ##Sort on length reversed
+        LargeCityNames.sort(key = len, reverse = True)    
 
     except:
         ##An error occured
@@ -804,8 +958,15 @@ if Continue:
     cores = mp.cpu_count()
 
     if not runParallel:
-        cores = 1
-        
+        cores = 1        
+    
+    if saveHtml:
+        ##Check if local storage dir exists
+        localHtml = localDir + "/Webpages"
+        if not os.path.isdir(localHtml):
+            ##create dir
+            os.makedirs(localHtml)
+            
     ##Create logfile
     logFile = "4b_results_" + country.upper() + lang.lower() + "1.txt"
     if startPos > 0 and os.path.isfile(logFile):
@@ -814,10 +975,10 @@ if Continue:
     else:
         ##Create new file
         f = open(logFile, 'w')
-
+    
     ##1. Obtain data                   
     ##1a. Get urls, from script 4a diferent files
-    fileName4 = localDir + "/4_external_" + country.upper() + lang.lower() + "2.csv"
+    fileName4 = localDir + "/4_external_" + country.upper() + lang.lower() + "1.csv"
     urls_found = df.loadCSVfile(fileName4)
 
     ##Create list of urls to be checked
@@ -828,10 +989,9 @@ if Continue:
     ##Preprocesslist
     ##dom_found2 = PreProcessList(dom_found2, country)
     ##remove nanś 
-    dom_found2 = [x for x in dom_found if str(x) != 'nan']
-    dom_found2.sort()
+    dom_found = [x for x in dom_found if str(x) != 'nan']
     ##remove duplicates
-    dom_found = list(set(dom_found2))
+    dom_found = list(set(dom_found))
     dom_found.sort()
 
     ##List to store end results
@@ -891,7 +1051,7 @@ if Continue:
 
     ##Store intermediate results
     ##Convert results to DataFrame
-    resultDF = pandas.DataFrame(data = resultsF, columns = ["org_url", "url_visited", "inCountry", "score", "top10Words", "action"])            
+    resultDF = pandas.DataFrame(data = resultsF, columns = ["org_url", "url_visited", "inCountry", "language", "text", "action"])            
     ##Store findings
     if startPos > 0 and startPos < len(dom_found):
         fileNameR = "4_Result_" + country.upper() + lang.lower() + "_" + str(startPos) + "_int.csv"
@@ -929,7 +1089,9 @@ if Continue:
             ##Add new links to resultDF
             if len(resultsF2) > 0:
                 ##Convert to dataframe
-                resultDF2 = pandas.DataFrame(data = resultsF2)            
+                resultDF2 = pandas.DataFrame(data = resultsF2) 
+                ##Make sure couln names are included
+                resultDF2.columns = ["org_url", "url_visited", "inCountry", "language", "text", "action"]          
                 ##Create combined frame
                 frames = [resultDF, resultDF2]
                 ##Merge frames
@@ -959,26 +1121,42 @@ if Continue:
         for i in range(resultDF.shape[0]):            
             ##get results row
             res = resultDF.iloc[i,:]
+            
             ##check inCountry of row, location should be None AND top 10 words filled
             if not res[2] == True and not res[2] == False and len(str(res[4])) > 0: ##15% of len(resultsF)
-                print(i)
-                ##Do social media check
-                soup, vurl = df.createsoup(str(res[1]))
-                foundS = socCheckLoc(soup, vurl)
-                ##Check finding
-                if not foundS == None:
-                    ##update results location
-                    resultDF.iloc[i,2] = foundS
-                    newCount += 1
-                ##Show number of new links
+                ##Get vurl (url visited)
+                vurl = str(res[1]).strip()                
                 
-            if newCount > 5:
-                break
+                ##Check if vurl contains drone word or ends with number                                
+                if re.search("\/[0-9]+$", vurl):
+                    ##url ends with number (keep)
+                    pass
+                elif any(x for x in drone_words if vurl.find(x) > -1):
+                    ##vurl contain droeword acronym
+                    pass
+                else:
+                    ##clear vurl
+                    vurl = ""
+                
+                ##Do social media based location check (if not empty)
+                if not vurl == "":
+                    ##Show progress
+                    print(i)
+                    ##Do social media check
+                    soup, vurl2 = df.createsoup(vurl)
+                    foundS = socCheckLoc(soup, vurl2)
+                    ##Check finding
+                    if not foundS == None:
+                        ##update results location
+                        resultDF.iloc[i,2] = foundS
+                        newCount += 1
+                    ##Show number of new links
+                    
         print("New unknown locations updated by social media (" + str(newCount) + " in total)")
         f.write("New unknown locations updated by social media (" + str(newCount) + " in total)\n")       
         
     ##Make sure couln names are included
-    resultDF.columns = ["org_url", "url_visited", "inCountry", "score", "top10Words", "action"]          
+    resultDF.columns = ["org_url", "url_visited", "inCountry", "language", "text", "action"]          
     ##Store findings
     if startPos > 0 and startPos < len(dom_found):
         fileNameR = "4_Result_" + country.upper() + lang.lower() + "_" + str(startPos) + ".csv"

@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-## Aug 12 2021, version 1.07, added final cleaning step for nan and empty spaces
+## Oct 27 2021, version 1.2, added final cleaning step for nan and empty spaces
 ## changed pandas read_csv to df.loadCSVfile fundtionc whihc is more generic and solves pands read iseu for some files
 ## Check urls found, input is a list of urls, first part of script4 only goes as afar as to check social media for additional urls
 ##with updated location search (inlcude text preprocessing and spaceses added to names)
 ##reduced duplicate http splitting, pandas empty frames and option to in- or exclude social media search
+##Include results of Name based URLsearch and a very thorough social media link cleaning (focussing in the end on drone acronym including links)
+##Multicore version to quicker ProProcess huge numbers of links (rough 2x)
 
 #Load libraries 
 import os
 import sys
 import re
-import time
+##import time
 import pandas
+import numpy
 ##import nltk
 import multiprocessing as mp
 import configparser
@@ -22,6 +25,9 @@ localDir = os.getcwd()
 ##get regex for url matching in documents
 genUrl = r"((?:https?://)?(?:[a-z0-9\-]+[.])?([a-zA-Z0-9_\-]+[.][a-z]{2,4})(?:[a-zA-Z0-9_\-./]+)?)"
 genMail = r"[a-zA-Z0-9_\-.]+@([a-zA-Z0-9_\-]+[.][a-z]{2,4})"
+
+##Factor to multiply the number of cores with for parallel scraping (not for search engine use)
+multiTimes = 1 ##number to multiply number of parallel scraping sessions
 
 ##Exclude vurl for often occuring not relevant urls 
 urls_exclude = ["doi.org", "google.com", "youtube.com", "youtu.be", "worldcat.org", "b.tracxn.com", "gmail.com", "cookiedatabase.org", "twitter.com/share?", "twitter.com/hashtag", "twitter.com/intent/", "facebook.com/sharer.php?", "instagram.com/p/", "addtoany.com/add_to/", "whatsapp://send?", "pinterest.com/pin/", "t.me/share/url?", "change-this-email-address.com"]
@@ -147,7 +153,7 @@ def Twitterchecks(vurl, brows = 1):
                         vurl2 = url
                         break                       
                 ##Preprocess and check link
-                vurl2 = PreProcessList([vurl2], country)
+                vurl2 = PreProcessList([vurl2])
                 if vurl2 == []:
                     vurl2 = ''
                 else:
@@ -204,7 +210,7 @@ def Facebookchecks(vurl, brows = 1):
                         vurl2 = url
                         break                
                 ##Preprocess and check link
-                vurl2 = PreProcessList([vurl2], country)
+                vurl2 = PreProcessList([vurl2])
                 if vurl2 == []:
                     vurl2 = ''
                 else:
@@ -257,7 +263,7 @@ def Linkedinchecks(vurl, brows = 1):
                         print(link)
                         vurl2 = link
                 ##Preprocess and check link
-                vurl2 = PreProcessList([vurl2], country)
+                vurl2 = PreProcessList([vurl2])
                 if vurl2 == []:
                     vurl2 = ''
                 else:
@@ -315,7 +321,7 @@ def Instagramchecks(vurl, brows = 1):
                 vurl2 = link
             
             ##Preprocess and check link
-            vurl2 = PreProcessList([vurl2], country)
+            vurl2 = PreProcessList([vurl2])
             if vurl2 == []:
                 vurl2 = ''
             else:
@@ -365,7 +371,7 @@ def Pinterestchecks(vurl, brows = 1):
                 vurl2 = link
 
             ##Preprocess and check link
-            vurl2 = PreProcessList([vurl2], country)
+            vurl2 = PreProcessList([vurl2])
             if vurl2 == []:
                 vurl2 = ''
             else:
@@ -421,7 +427,7 @@ def reduceLinks(urls_list):
     
     return(urls_list2)
 
-def PreProcessList(urls_list, country):
+def PreProcessList(urls_list):
     urls_cleaned = []
     
     ##1. Check for multiple links in 1 url
@@ -484,6 +490,7 @@ def ProcessSoc(urls_found, brows = 1):
     for url in urls_found:    
         vurl2 =''
         inCountry = None
+            
         ##Check Social media options
         if url.lower().find("twitter.com") > 0:
             ##check twitter options
@@ -522,6 +529,135 @@ def ProcessSoc(urls_found, brows = 1):
                     urls_extra.append(vurl2)
 
     return(urls_extra)         
+
+##Remove links on Social media that are similar to domain names of urls already included
+def PreProcessSoc2(urls_found, urls_doms2, brows = 1):
+    ##Remove any duplicates and sort
+    urls_found = list(set(urls_found))
+    urls_found.sort()
+    
+    ##1. remove any non-country links (have a non-country string before domain name)
+    for i in range(len(urls_found)):
+        ##get url
+        url = urls_found[i].strip()
+        ##Check part preceding domain name (can be domain name when this part is not present)
+        sec = url.split(".")[0]
+        if sec.startswith("http"):
+            sec = sec.replace("http://", "")
+            sec = sec.replace("https://", "")
+
+        ##Check if url needs to br removed
+        if sec == "instagram" or sec == "twitter" or sec == "facebook" or sec == "linkedin" or sec == "pinterest":
+            ##Do nothing
+            pass
+        elif not sec == country and not sec == "www" and not sec == "":
+            ##Clear link
+            urls_found[i] = ""
+    
+    ##remove empty strings        
+    urls_found = [x for x in urls_found if not x == ""]
+    urls_found.sort()
+    
+    ###2. remove any links with _ between to number series for facebook
+    for i in range(len(urls_found)):
+        url = urls_found[i].strip()        
+        if url.find("facebook.com") > -1 and url.find("_") > -1:
+            ##Check for potential message type
+            urlL = url.split("/")
+            ext = urlL[len(urlL)-1]
+            if re.match("[0-9]+_[0-9]+", ext):
+                ##extract part before _ and see if already included
+                loc = url.index("_")
+                url2 = url[0:loc]
+                if not url2 == "" and not url2 in urls_found:
+                    urls_found.append(url2)
+                else:
+                    urls_found[i] = ""
+    
+    ##remove empty strings        
+    urls_found = [x for x in urls_found if not x == ""]
+    urls_found.sort()
+       
+    ##3. Remove any names ending with different country codes
+    for i in range(len(urls_found)):
+        url = urls_found[i].strip()
+        ##Check if url ends with . and 3 letters
+        if re.search("\.[a-z]{2}$", url):
+            ##Check if extension is ie
+            if not url.endswith(country):
+                urls_found[i] = ""
+
+    ##remove empty strings        
+    urls_found = [x for x in urls_found if not x == ""]
+    urls_found.sort()
+             
+    ##4. Check extensions (part after social media domain)  
+    ## AND
+    ##5 Check for duoplicate usernames on different platforms
+    for i in range(len(urls_found)):        
+        ##get url
+        url = urls_found[i].strip()
+        ##Check url
+        if not url == "":
+            ##get extension (part after social media domain + com; if no extension is there domain names is selected)
+            urlL = url.split("/")
+            ext = urlL[len(urlL)-1]
+            ##remove number and - or _ at end
+            ext = re.sub("[\-\_]{1}[0-9]+$", "", ext)
+            
+            ##Check if ext is included in already collected urls (urls_found2) domains
+            if any(x for x in urls_doms2 if x.find(ext) > -1):
+                urls_found[i] = ""
+            
+            else:
+                ##Check for duplicate extensions on multiple platforms (or multiple http and https links)
+                ##get urls with the same ext
+                links = [x for x in urls_found if x.endswith(ext)]
+                links.sort(key = len)
+                ##Check how many were found, only remove if more than 1 has been found
+                if len(links) > 1:       
+                    ## 1. Choose twitter if available
+                    twt = [x for x in links if x.find("twitter.com") > -1]
+                    twt.sort(key = len)
+                    if len(twt) >= 1:
+                        ##Remove longest twitter link from links                        
+                        links.remove(twt[len(twt)-1])
+                    else: ##2. No twitter links
+                        ##Just remove the longest link from links
+                        links.remove(links[len(links)-1])
+                
+                    ##Subsequently remove the remaining links
+                    for l in links:
+                        if not l == "":
+                            ##urls_found = ["" if x == l else x for x in urls_found]
+                            for j in range(i,len(urls_found)):
+                                if urls_found[j] == l:
+                                    ##Clear
+                                    urls_found[j] = ""
+                                    ##stop for loop for current j
+                                    break
+                       
+    ##remove empty strings        
+    urls_found = [x for x in urls_found if not x == ""]
+    
+    ##6. Keep only the ones with a drone acronym in it
+    for i in range(len(urls_found)):
+        url = urls_found[i].strip()
+        
+        if re.search("\/[0-9]+$", url):
+            ##url ends with number (keep)
+            pass
+        elif not any(x for x in drone_words if url.find(x) > -1):
+            urls_found[i] = ""
+    
+    ##remove empty strings        
+    urls_found = [x for x in urls_found if not x == ""]
+    
+    ##remove any duplciates and sort
+    urls_found = list(set(urls_found))
+    urls_found.sort()
+
+    return(urls_found)         
  
 ##Multicore version of ProcessSoc
 def ProcessSocmp(urls_found, brows, outputQueue):
@@ -535,6 +671,28 @@ def ProcessSocmp(urls_found, brows, outputQueue):
     finally:        
         outputQueue.put(links)
 
+def getAllUrlsSearched(urlSearchDF):
+    urls = []
+    
+    ##get column with urls as list
+    urlsList = list(urlSearchDF.iloc[:,1])
+    
+    ##extract all urls (sperated by a komma) in each element of list 
+    for u in urlsList:
+        ##print(u)
+        ##Split urls at komma
+        urls2 = u.strip().split(",")
+        for u2 in urls2:
+            ##remove any leading and lagging spaces 
+            u2 = u2.strip()
+            ##Check if link strats with http and is not included yet
+            if u2.startswith("http") and not u2 in urls:
+                urls.append(u2)
+    
+    del urlsList
+    del urls2
+    
+    return(urls)
 
 ### START #####################################################################
 Continue = False
@@ -596,7 +754,7 @@ if Continue:
     import Drone_functions as df 
         
     try: 
-        #get municipalities of NL
+        #get municipalities of country
         municl = df.loadCSVfile(cityNameFile)
         municl2 = list(municl.iloc[:,0])
         ##Remove any leading and lagging spaces
@@ -617,15 +775,15 @@ if Continue:
         ##Check for existence of essential files
         fileName1E = localDir + "/1_external_" + country.upper() + lang.lower() + "1.csv"
         fileName2E = localDir + "/2_external_" + country.upper() + lang.lower() + "1.csv"
-        fileName3E = localDir + "/3_externalPDF_" + country.upper() + lang.lower() + "1.csv" ##Check name
+        fileName3Ea = localDir + "/3_externalPDF_" + country.upper() + lang.lower() + "1.csv" ##Check name
         if not os.path.isfile(fileName1E):
             print(fileName1E + " file was not found, make sure its available. Script halted")
             Continue = False
         if not os.path.isfile(fileName2E):
             print(fileName2E + " file was not found, make sure its available. Script halted")
             Continue = False
-        if not os.path.isfile(fileName3E):
-            print(fileName3E + " file was not found, make sure its available. Script halted")
+        if not os.path.isfile(fileName3Ea):
+            print(fileName3Ea + " file was not found, make sure its available. Script halted")
             Continue = False            
     except:
         ##An error occured
@@ -670,10 +828,22 @@ if Continue:
         urls_found2c = pandas.DataFrame([])
     
     ##Get result from PDF extraction
-    urls_found3 = df.loadCSVfile(fileName3E)
+    urls_found3a = df.loadCSVfile(fileName3Ea)
 
-    ##Combine findings
-    frames = [urls_found1, urls_found2, urls_found2b, urls_found2c, urls_found3]
+    ##Check if result of URLsearch for country is avalable
+    fileName3Eb = localDir + "/URLsearch_result_" + country.upper() + "_def1.csv" ##Check name
+    if os.path.isfile(fileName3Eb):
+        urls_found3b = df.loadCSVfile(fileName3Eb) ##Contains urls found by URLsearch based on name detected (for both languages)
+        ##deal with na/nan 
+        urls_found3b.fillna("", inplace = True)
+        ##Make sure all urls are included
+        urls_found3bList = getAllUrlsSearched(urls_found3b)
+    else:
+        print(fileName3Eb + " was not found, is this OK?")
+        urls_found3bList = []
+        
+    ##Combine found dataframes (not 3Eb!)
+    frames = [urls_found1, urls_found2, urls_found2b, urls_found2c, urls_found3a]
     ##frames = [urls_found1, urls_found3]
     urls_foundDF = pandas.concat(frames)
     ##Drop duplicates (in first column)
@@ -683,13 +853,44 @@ if Continue:
     urls_found = list(urls_foundDF.iloc[:,0])
     if urls_found[0] == '0':
         urls_found = urls_found[1:len(urls_found)]
+        
+    if len(urls_found3bList) > 0:
+        ##Add 3EbList
+        urls_found = urls_found + urls_found3bList
+        ##Remove any duplicates
+        urls_found = list(set(urls_found))
 
     print(str(len(urls_found)) + " total number of links loaded")
     f.write(str(len(urls_found)) + " total number of links loaded\n")
 
-    
+        
     ##1b. Do cleaning and checking of all urls (removes any clearly erronious links, which seriously reduces processing later on)
-    urls_found2 = PreProcessList(urls_found, country)
+    urls_found2 = []
+    if cores >= 2:
+        ##process multicore, by first clearing chunks
+        
+        ##create chunks
+        chunks = numpy.array_split(urls_found, cores*multiTimes)
+        ##Use all cores to process file
+        pool = mp.Pool(cores*multiTimes)
+        resultsP = pool.map(PreProcessList, [list(c) for c in chunks])        
+        pool.close()
+        pool.join()
+    
+        ##combine results
+        for res in resultsP:
+            for r in res:
+                if not r in urls_found2:
+                    urls_found2.append(r)
+        
+        ##Subsequently clear complete list
+        urls_found2 = PreProcessList(urls_found2)
+        del resultsP
+        
+    else:       
+        ##process serial (as a whole)
+        urls_found2 = PreProcessList(urls_found)        
+        
     urls_found2.sort()
     print(str(len(urls_found2)) + " number of uniqe links will be processed and checked")
     f.write(str(len(urls_found2)) + " number of uniqe links will be processed and checked\n")
@@ -711,66 +912,51 @@ if Continue:
             ##Check linked link which to exclude
             if url.lower().find("linkedin.com") > 0 and (url.lower().find("/groups/") > 0 or url.lower().find("/feed/") > 0 or url.lower().find("/help/") > 0):
                 url = ""
-            ##final check if need to add
+           ##final check if need to add 
             if not url == "" and not url in urls_foundSoc:
                 urls_foundSoc.append(url)
         else:
             urls_found2b.append(url)
 
+    ##Reduce social media links as much as possible prior to checking online
+    ##Get doms of urls_found2b
+    urls_doms2b = [df.getDomain(x, False) for x in urls_found2b]
+    ##remove www.
+    urls_doms2b = [x.replace("www.", "") for x in urls_doms2b]
+    ##remove any duplicates
+    urls_doms2b = list(set(urls_doms2b))
+    urls_doms2b.sort()
+    ##Preprocess social media link
+    urls_foundSoc = PreProcessSoc2(urls_foundSoc, urls_doms2b)
+    ##These social media links MUST be checked     
+    del urls_doms2b
+    
     ##show results
     print(str(len(urls_foundSoc)) + " unique social media links found")
     f.write(str(len(urls_foundSoc)) + " unique social media links found\n")
     print(str(len(urls_found2b)) + " unique other websites links found")
     f.write(str(len(urls_found2b)) + " unique other websites links found\n")
 
+    ##Save preprocessed social media links (intermediate results)
+    fileName4S = "4_external_"+ country.upper() + lang.lower() + "_intSoc12.csv"
+    totalSocUrls = pandas.DataFrame(urls_foundSoc)
+    totalSocUrls.to_csv(fileName4S, index=False) 
+    ##fileName4U = "4_external_"+ country.upper() + lang.lower() + "_intUrls1.csv"
+    ##totalUrlsU = pandas.DataFrame(urls_found2b)
+    ##totalUrlsU.to_csv(fileName4U, index=False) 
+
     ##2. Proccess social media data, in parallel or serial
     if socialSearch:
-        if cores >=2:
-            ##Muliticore test version
-            print("Parallel social media search option is used (max 2 different)")
-            f.write("Parallel social media search option is used (max 2 different)\n")
+        print("Serial social media search option is used (1 process)")
+        f.write("Serial social media search option is used (1 process)\n")
 
-            half = round(len(urls_foundSoc)/2)
-            urls_Soc1 = urls_foundSoc[0:half]
-            urls_Soc2 = urls_foundSoc[(half+1):len(urls_foundSoc)]
-
-            ##init output queue
-            out_q = mp.Queue()
-
-            ##Init 2 simultanious queries, store output in queue
-            p1 = mp.Process(target = ProcessSocmp, args = (urls_Soc1, 1, out_q))
-            p1.start()
-            p2 = mp.Process(target = ProcessSocmp, args = (urls_Soc2, 2, out_q)) ##Make sure it runs (deal with driver issues)
-            p2.start()
-        
-            time.sleep(5)
-    
-            ##Wait till finished
-            p1.join()
-            p2.join()
-    
-            ##Combine results
-            urls_extra_found = []
-            for i in range(2):
-                urls_extra_found.append(out_q.get())
-
-            ##Add to urls_found2b
-            for links in urls_extra_found:
-                for url in links:
-                    if not url in urls_found2b:
-                        urls_found2b.append(url)
-        else:
-            print("Serial social media search option is used (1 process)")
-            f.write("Serial social media search option is used (1 process)\n")
-
-            ##Check for country and extra link (compared to urls_found2b)
-            urls_extra_found = ProcessSoc(urls_foundSoc)
-            ##urls_extra_found = list(set(urls_extra_found))
-            ##Add anyrthong thats new
-            for url in urls_extra_found:
-                if not url in urls_found2b:
-                    urls_found2b.append(url)
-
+        ##Check for country and extra link (compared to urls_found2b)
+        urls_extra_found = ProcessSoc(urls_foundSoc)
+        ##urls_extra_found = list(set(urls_extra_found))
+        ##Add anyrthong thats new
+        for url in urls_extra_found:
+            if not url in urls_found2b:
+                urls_found2b.append(url) 
 
         print(str(len(urls_found2b)) + " total number of urls found")
         f.write(str(len(urls_found2b)) + " total number of urls found\n")

@@ -5,9 +5,9 @@ Created on Tue Jan 26 08:37:51 2021
 
 @author: piet
 
-Updated on Aug 9 2021, version 3.09  adjusted getDomain with check for number of split results
+Updated on Oct 31 2021, version 3.11  adjusted getDomain with check for number of split results
 Improved cleanLinks function, extra pandas read option included, adjusted cleanLinks
-Updated domain extenion list
+Updated domain extenion list, adjusted domain extension list, Adjuste getRedirect function (with bool wwwCheck)
 """
 ##Drone functions file
 
@@ -65,7 +65,7 @@ header = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_3) AppleWeb
 ##check if ovpn files are available
 if os.path.isdir('/etc/openvpn'):
     ##Settings for VPN switching
-    sudoPassword = 'REMOVED'
+    sudoPassword = '<<REMOVED>>'
     usedVPN = []
     maxG = 50 ##maximun number of checks per VPN location (before detected)
 
@@ -86,8 +86,10 @@ outq = queue.Queue()
 genUrl = r"((?:https?://)?(?:[a-z0-9\-]+[.])?([a-zA-Z0-9_\-]+[.][a-z]{2,4})(?:[a-zA-Z0-9_\-./]+)?)"
 ##define list of other EU countries domain + us, ca, au, sg, china
 ##euDom = ['ad', 'ae', 'am', 'at', 'au', 'ba', 'be', 'bg', 'br', 'by', 'ca', 'ch', 'cn', 'cy', 'cz', 'de', 'dk', 'ee', 'es', 'fi', 'fo', 'fr', 'gg', 'gi', 'gl', 'gp', 'gr', 'hr', 'hu', 'ie', 'il', 'im', 'is', 'it', 'je', 'jp', 'kr', 'li', 'lt', 'lu', 'lv', 'mc', 'md', 'me', 'mk', 'mt', 'mx', 'nl', 'no', 'nz', 'pk', 'pm', 'pl', 'pt', 're', 'ro', 'rs', 'ru', 'se', 'sg', 'si', 'sk', 'su', 'tf', 'tr', 'ua', 'uk', 'us', 'wf', 'yt', 'za']
-euDom = ['ac', 'ad', 'ae', 'af', 'ag', 'ai', 'al', 'am', 'an', 'ao', 'aq', 'ar', 'as', 'at', 'au', 'aw', 'ax', 'az', 'ba', 'bb', 'bd', 'be', 'bf', 'bg', 'bh', 'bi', 'bj', 'bl', 'bm', 'bn', 'bo', 'bq', 'br', 'bs', 'bt', 'bv', 'bw', 'by', 'bz', 'ca', 'cat', 'cc', 'cd', 'cf', 'cg', 'ch', 'ci', 'ck', 'cl', 'cm', 'cn', 'co', 'cr', 'cu', 'cv', 'cw', 'cx', 'cy', 'cz', 'de', 'dj', 'dk', 'dm', 'do', 'dz', 'ec', 'ee', 'eg', 'eh', 'er', 'es', 'et', 'eu', 'fi', 'fj', 'fk', 'fm', 'fo', 'fr', 'ga', 'gal', 'gb', 'gd', 'ge', 'gf', 'gg', 'gh', 'gi', 'gl', 'gm', 'gn', 'gp', 'gq', 'gr', 'gs', 'gt', 'gu', 'gw', 'gy', 'hk', 'hm', 'hn', 'hr', 'ht', 'hu', 'id', 'ie', 'il', 'im', 'in', 'io', 'iq', 'ir', 'is', 'it', 'je', 'jm', 'jo', 'jp', 'ke', 'kg', 'kh', 'ki', 'km', 'kn', 'kp', 'kr', 'kw', 'ky', 'kz', 'la', 'lb', 'lc', 'li', 'lk', 'lr', 'ls', 'lt', 'lu', 'lv', 'ly', 'ma', 'mc', 'md', 'me', 'mf', 'mg', 'mh', 'mk', 'ml', 'mm', 'mn', 'mo', 'mp', 'mq', 'mr', 'ms', 'mt', 'mu', 'mv', 'mw', 'mx', 'my', 'mz', 'na', 'nc', 'ne', 'nf', 'ng', 'ni', 'nl', 'no', 'np', 'nr', 'nu', 'nz', 'om', 'pa', 'pe', 'pf', 'pg', 'ph', 'pk', 'pl', 'pm', 'pn', 'pr', 'ps', 'pt', 'pw', 'py', 'qa', 're', 'ro', 'rs', 'ru', 'rw', 'sa', 'sb', 'sc', 'sd', 'se', 'sg', 'sh', 'si', 'sj', 'sk', 'sl', 'sm', 'sn', 'so', 'sr', 'ss', 'st', 'sv', 'sx', 'sy', 'sz', 'tc', 'td', 'tf', 'tg', 'th', 'tj', 'tk', 'tl', 'tm', 'tn', 'to', 'tp', 'tr', 'tt', 'tv', 'tw', 'tz', 'ua', 'ug', 'uk', 'us', 'uy', 'uz', 'va', 'vc', 've', 'vg', 'vi', 'vn', 'vu', 'wf', 'ws', 'ye', 'yt', 'za', 'zm', 'zw']
+euDom = ['ac', 'ad', 'ae', 'af', 'ag', 'ai', 'al', 'am', 'an', 'ao', 'aq', 'ar', 'as', 'at', 'au', 'aw', 'ax', 'az', 'ba', 'bb', 'bd', 'be', 'bf', 'bg', 'bh', 'bi', 'bj', 'bl', 'bm', 'bn', 'bo', 'bq', 'br', 'bs', 'bt', 'bv', 'bw', 'by', 'bz', 'ca', 'cat', 'cc', 'cd', 'cf', 'cg', 'ch', 'ci', 'ck', 'cl', 'cm', 'cn', 'co', 'cr', 'cu', 'cv', 'cw', 'cx', 'cy', 'cz', 'de', 'dj', 'dk', 'dm', 'do', 'dz', 'ec', 'ee', 'eg', 'eh', 'er', 'es', 'et', 'fi', 'fj', 'fk', 'fm', 'fo', 'fr', 'ga', 'gal', 'gb', 'gd', 'ge', 'gf', 'gg', 'gh', 'gi', 'gl', 'gm', 'gn', 'gp', 'gq', 'gr', 'gs', 'gt', 'gu', 'gw', 'gy', 'hk', 'hm', 'hn', 'hr', 'ht', 'hu', 'id', 'ie', 'il', 'im', 'in', 'iq', 'ir', 'is', 'it', 'je', 'jm', 'jo', 'jp', 'ke', 'kg', 'kh', 'ki', 'km', 'kn', 'kp', 'kr', 'kw', 'ky', 'kz', 'la', 'lb', 'lc', 'li', 'lk', 'lr', 'ls', 'lt', 'lu', 'lv', 'ly', 'ma', 'mc', 'md', 'me', 'mf', 'mg', 'mh', 'mk', 'ml', 'mm', 'mn', 'mo', 'mp', 'mq', 'mr', 'ms', 'mt', 'mu', 'mv', 'mw', 'mx', 'my', 'mz', 'na', 'nc', 'ne', 'nf', 'ng', 'ni', 'nl', 'no', 'np', 'nr', 'nu', 'nz', 'om', 'pa', 'pe', 'pf', 'pg', 'ph', 'pk', 'pl', 'pm', 'pn', 'pr', 'ps', 'pt', 'pw', 'py', 'qa', 're', 'ro', 'rs', 'ru', 'rw', 'sa', 'sb', 'sc', 'sd', 'se', 'sg', 'sh', 'si', 'sj', 'sk', 'sl', 'sm', 'sn', 'so', 'sr', 'ss', 'st', 'sv', 'sx', 'sy', 'sz', 'tc', 'td', 'tf', 'tg', 'th', 'tj', 'tk', 'tl', 'tm', 'tn', 'to', 'tp', 'tr', 'tt', 'tw', 'tz', 'ua', 'ug', 'uk', 'us', 'uy', 'uz', 'va', 'vc', 've', 'vg', 'vi', 'vn', 'vu', 'wf', 'ye', 'yt', 'za', 'zm', 'zw']
 ##list is not complete yet (but it is for Europe), added nz kr ae
+##remove eu, io, tv and ws as they are generally used (not contry specific)
+##cat and gal are part of spain
 
 ##list of country names (n English as a first test)
 worldCountries = ['Afghanistan','Albania','Algeria','Andorra','Angola','Antigua and Barbuda','Argentina','Armenia','Australia','Austria','Azerbaijan','The Bahamas','Bahrain','Bangladesh','Barbados','Belarus','Belgium','Belize','Benin','Bhutan','Bolivia','Bosnia and Herzegovina','Botswana','Brazil','Brunei','Bulgaria','Burkina Faso','Burundi','Cambodia','Cameroon','Canada','Cape Verde','Central African Republic','Chad','Chile','China','Colombia','Comoros','Congo','Republic of the Congo','Democratic Republic of the Congo','Costa Rica','Côte de Ivoire','Croatia','Cuba','Cyprus','Czechia','Denmark','Djibuti','Dominica Republic','East Timor','Ecuador','Egypt','El Salvador','Equatorial Guinea','Eritrea','Estonia','Eswatini','Ethiopia','Fiji','Finland','France','Gabon','The Gambia','Georgia','Deutschland','Germany','Ghana','Greece','Grenada','Guatemala','Guinea','Guyana','Haiti','Honduras','Hong Kong','Hungary','Iceland','India','Indonesia','Iran','Iraq','Ireland','Iere','Israel','Italy','Jamaica','Japan','Jordan','Kazakhstan','Kenya','Korea','North Korea','South Korea','Kosovo','Kuwait','Kyrgyzstan','Laos','Latvia','Lebanon','Lesotho','Libya','Liechtenstein','Lithuania','Luxembourg','Madagascar','Malawi','Malaysia','Maldives','Mali','Malta','Marshall Islands','Mauritania','Mauritius','Mexico','Micronesia','Federated States of Micronesia','Moldova','Monaco','Mongolia','Montenegro','Morocco','Mozambique','Myanmar','Namibia','Nepal','Nederland','Netherlands','New Zealand','Nicaragua','Niger','Nigeria','North Macedonia','Norway','Oman','Pakistan','Palau','Palestine','Panama','Papua New Guinea','Paraguay','Peru','Philippines','Poland','Portugual','Qatar','Romania','Russia','Rwanda','Saint Kitts and Nevis','Saint Lucia','Saint Vincent and the Grenadines','Samoa','San Marino','São Tomé and Principe','Saudi Arabia','Senegal','Serbia','Seychelles','Sierra Leone','Singapore','Slovakia','Slovenia','Solomon Islands','Somalia','South Africa','South Sudan','Espania','Spain','Sri Lanka','Sudan','Sweden','Switzerland','Syria','Tajikistan','Tanzania','Thailand','Togo','Tonga','Trinidad and Tobago','Tunisia','Turkmenistan','Tuvalu','Uganda','Ukraine','United Arab Emirates','United Kingdom','United States','Uruguay','Uzbekistan','Vanuatu','Vatican City','Venezuela','Vietnam','Yemen','Zambia','Zimbabwe']
@@ -97,7 +99,7 @@ worldCountries = ['Afghanistan','Albania','Algeria','Andorra','Angola','Antigua 
 ##Init chromium
 ##UBUNTU STYLE LOCATION
 CHROME_PATH = '/usr/bin/google-chrome'
-CHROMEDRIVER_PATH = '/user/bin/chromedriver'
+CHROMEDRIVER_PATH = '/usr/bin/chromedriver' ##/usr/local/bin/chromedriver
 chrome_options = Options()  
 chrome_options.add_argument("--headless") 
 chrome_options.add_argument("--disable-gpu")   
@@ -716,7 +718,7 @@ def getKeywords(soup):
     return(keywords)
  
 @timeout_decorator.timeout(10) ## If execution takes longer than 10 sec, TimeOutError is raised
-def getRedirect(url):
+def getRedirect(url, wwwCheck = True):
     vurl = ""
     if len(url) > 0:
         try:
@@ -746,9 +748,13 @@ def getRedirect(url):
                 url = vurl ##copy old
                 vurl = vurl2 ##copy new    
         except:  ##timed out by website (because it does not exists)
-            if not url.lower().find('www.') > 0:
-                url1 = url.replace('://', '://www.')
-                vurl = getRedirect(url1)
+            if wwwCheck:
+                if not url.lower().find('://www.') > -1:
+                    url1 = url.replace('://', '://www.')
+                    ##try again, but no wwCheck again
+                    vurl = getRedirect(url1, False)
+                else:
+                    vurl = ""
             else:
                 vurl = ""
     return(vurl)    
@@ -2682,6 +2688,11 @@ def checkCountries(urls, country):
     ##Create domain list
     euDom1 = euDom.copy()
     euDom1.remove(country) ##Remove country extension from list of domain extensions
+    if country == 'es':
+        ##also remove cat (catalonia)
+        euDom1.remove('cat')
+        ##and galicia
+        euDom1.remove('gal')
     
     ##Match url with regex?
     ##Check urls

@@ -32,20 +32,20 @@ import sys
 # - language language (in lowercase, known by nltk)
 #
 # Method
-# - words are collected, stopwords removes
-# - per word, relative frequency is calculated (freqDoc): occurrences / total words
+# - words are collected, stopwords removed
+# - per word, relative frequency is calculated (freqSrcDoc): occurrences / total words
 # - per word, relative frequency in the Exquisite Corpus (https://github.com/LuminosoInsight/exquisite-corpus, used by wordfreq) is calculated (freqExCorp)
 # - words are stemmed
-# - words are grouped per stem (freDoc and freqExCrop are summed)
-# - per stem, freqRatio = freqDoc / freqExCrop is calculated. Example: for the word 'applic' the freqRatio is 31. This means that the unstemmed variants ('application', 'applications', 'applicable') occur 31 times more in this website than in the corpus.
+# - words are grouped per stem (freqSrcDoc and freqExCrop are summed)
+# - per stem, freqRatio = freqSrcDoc / freqExCrop is calculated. Example: for the word 'applic' the freqRatio is 31. This means that the unstemmed variants ('application', 'applications', 'applicable') occur 31 times more in this website than in the corpus.
 #
-# Output: csv table with:
+# Output: csv table with the following columns:
 # - stem
+# - words (the unstemmed words, sorted by occurrence in the corpus (descending))
 # - count
-# - freqDoc
+# - freqSrcDoc
 # - freqExCorp
 # - freqRatio
-# - words (the unstemmed words, sorted by occurrence in the corpus (descending))
 def extract_keyword_profile(url, min_count=5, filename=None, language='english'):
     response = requests.get(url=url)
     soup = BeautifulSoup(response.content, 'html.parser')
@@ -117,7 +117,7 @@ def extract_keyword_profile(url, min_count=5, filename=None, language='english')
 
     df['stem'] = [stemmer.stem(word) for word in df['word']]
     df['freqExCorp'] = [(wordfreq.word_frequency(k, 'en')) for k, v in d.items()]
-    df['freqDoc'] = df['count'] / sum(df['count'])
+    df['freqSrcDoc'] = df['count'] / sum(df['count'])
     df2 = df.groupby('stem', as_index=False).sum()
 
     allequal = all(map(lambda x, y: x == y, df2['stem'].to_list(), list(nested_stems2.keys())))
@@ -135,7 +135,7 @@ def extract_keyword_profile(url, min_count=5, filename=None, language='english')
 
     df2['words'] = nested_stems4
 
-    df2['freqRatio'] = df2['freqDoc'] / df2['freqExCorp']
+    df2['freqRatio'] = df2['freqSrcDoc'] / df2['freqExCorp']
     df2 = df2.sort_values(by=['freqRatio'], ascending=False)
 
     df2 = df2[(df2['count'] > min_count) & (df2['freqExCorp'] > 0)]
@@ -144,20 +144,15 @@ def extract_keyword_profile(url, min_count=5, filename=None, language='english')
 
     df2['freqRatio'] = round(df2['freqRatio'], 2)
     df2['freqExCorp'] = round(df2['freqExCorp'], 9)
-    df2['freqDoc'] = round(df2['freqDoc'], 9)
+    df2['freqSrcDoc'] = round(df2['freqSrcDoc'], 9)
 
-    df2 = df2[['stem', 'count', 'freqDoc', 'freqExCorp', 'freqRatio', 'words']]
+    df2 = df2[['stem', 'words', 'count', 'freqSrcDoc', 'freqExCorp', 'freqRatio']]
 
     if filename is not None:
-        df2.to_csv(filename, index=False)
+        df2.to_csv(filename, index=False, sep=";")
     return df2
 
 
 df = extract_keyword_profile(url="https://en.wikipedia.org/wiki/Unmanned_aerial_vehicle", filename="UAV.csv")
-df = extract_keyword_profile(url="https://es.wikipedia.org/wiki/Veh%C3%ADculo_a%C3%A9reo_no_tripulado", filename="UAV_es.csv", language="spanish")
-df = extract_keyword_profile(url="https://nl.wikipedia.org/wiki/Onbemand_luchtvaartuig", filename="UAV_nl.csv", language="dutch")
-
-
-
-df = extract_keyword_profile(url="https://en.wikipedia.org/wiki/Fender_Stratocaster", filename="Stratocaster.csv")
-df = extract_keyword_profile(url="https://r-tmap.github.io/tmap-book/nutshell.html", filename="tmap.csv")
+df = extract_keyword_profile(url="https://en.wikipedia.org/wiki/Renewable_energy", filename="ren_energy.csv")
+df = extract_keyword_profile(url="https://en.wikipedia.org/wiki/Circular_economy", filename="cir_economy.csv")
